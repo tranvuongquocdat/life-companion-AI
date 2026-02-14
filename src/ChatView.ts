@@ -114,9 +114,16 @@ export class ChatView extends ItemView {
     this.inputEl.disabled = true;
     this.sendBtn.disabled = true;
 
+    // Show loading indicator
+    const loadingEl = this.messagesContainer.createDiv({ cls: "lc-msg lc-msg-assistant lc-loading" });
+    loadingEl.textContent = "Đang suy nghĩ...";
+    this.scrollToBottom();
+
     try {
+      loadingEl.remove();
       await this.plugin.handleMessage(text, this.mode, this);
     } finally {
+      loadingEl.remove();
       this.inputEl.disabled = false;
       this.sendBtn.disabled = false;
       this.inputEl.focus();
