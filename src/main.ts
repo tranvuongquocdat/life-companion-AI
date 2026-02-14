@@ -1,5 +1,6 @@
 import { Notice, Plugin } from "obsidian";
 import { ChatView, VIEW_TYPE_CHAT } from "./ChatView";
+import { ChatHistory } from "./chat-history";
 import { ClaudeClient } from "./claude";
 import { ProfileManager } from "./profile";
 import { buildSystemPrompt } from "./prompts";
@@ -117,6 +118,11 @@ export default class LifeCompanionPlugin extends Plugin {
       if (this.conversationHistory.length > 20) {
         this.conversationHistory = this.conversationHistory.slice(-20);
       }
+
+      // Save to chat history file
+      const chatHistory = new ChatHistory(this.app);
+      await chatHistory.saveMessage({ role: "user", content: text, timestamp: Date.now() });
+      await chatHistory.saveMessage({ role: "assistant", content: response, timestamp: Date.now() });
     } catch (error) {
       const msg = error instanceof Error ? error.message : "Unknown error";
       view.addAssistantMessage(`Lỗi: ${msg}`);
