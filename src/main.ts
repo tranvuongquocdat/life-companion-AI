@@ -5,6 +5,7 @@ import { ClaudeClient } from "./claude";
 import { ProfileManager } from "./profile";
 import { buildSystemPrompt } from "./prompts";
 import { LifeCompanionSettingTab } from "./settings";
+import { refreshAccessToken } from "./auth";
 import {
   DEFAULT_SETTINGS,
   type ChatMode,
@@ -26,9 +27,7 @@ export default class LifeCompanionPlugin extends Plugin {
     this.vaultTools = new VaultTools(this.app);
     this.profileManager = new ProfileManager(this.app);
 
-    if (this.settings.apiKey) {
-      this.claudeClient = new ClaudeClient(this.settings.apiKey);
-    }
+    this.initClaudeClient();
 
     this.registerView(VIEW_TYPE_CHAT, (leaf) => new ChatView(leaf, this));
 
@@ -44,7 +43,6 @@ export default class LifeCompanionPlugin extends Plugin {
 
     this.addSettingTab(new LifeCompanionSettingTab(this.app, this));
 
-    // Ensure _life/ folder structure exists
     this.app.workspace.onLayoutReady(async () => {
       await this.profileManager.ensureLifeFolder();
     });
@@ -52,6 +50,40 @@ export default class LifeCompanionPlugin extends Plugin {
 
   async onunload() {
     this.app.workspace.detachLeavesOfType(VIEW_TYPE_CHAT);
+  }
+
+  private initClaudeClient() {
+    if (this.settings.authMode === "oauth" && this.settings.accessToken) {
+      this.claudeClient = new ClaudeClient({ accessToken: this.settings.accessToken });
+    } else if (this.settings.authMode === "apikey" && this.settings.apiKey) {
+      this.claudeClient = new ClaudeClient({ apiKey: this.settings.apiKey });
+    } else {
+      this.claudeClient = null;
+    }
+  }
+
+  private async ensureValidToken(): Promise<boolean> {
+    if (this.settings.authMode !== "oauth") return true;
+
+    // Refresh if token expires within 5 minutes
+    if (Date.now() > this.settings.tokenExpiresAt - 5 * 60 * 1000) {
+      try {
+        const tokens = await refreshAccessToken(this.settings.refreshToken);
+        this.settings.accessToken = tokens.accessToken;
+        this.settings.refreshToken = tokens.refreshToken;
+        this.settings.tokenExpiresAt = tokens.expiresAt;
+        await this.saveData(this.settings);
+        this.claudeClient = new ClaudeClient({ accessToken: tokens.accessToken });
+      } catch (error) {
+        new Notice("Token hết hạn. Vui lòng đăng nhập lại.");
+        this.settings.authMode = "none";
+        this.settings.accessToken = "";
+        this.settings.refreshToken = "";
+        await this.saveData(this.settings);
+        return false;
+      }
+    }
+    return true;
   }
 
   async activateView() {
@@ -66,15 +98,26 @@ export default class LifeCompanionPlugin extends Plugin {
   }
 
   async handleMessage(text: string, mode: ChatMode, view: ChatView) {
-    if (!this.settings.apiKey) {
+    if (this.settings.authMode === "none") {
       view.addAssistantMessage(
-        "Chưa có API key. Vào Settings → Life Companion để nhập API key nhé."
+        "Chưa đăng nhập. Vào Settings → Life Companion → Đăng nhập với Claude nhé."
       );
       return;
     }
 
+    // Refresh OAuth token if needed
+    if (!(await this.ensureValidToken())) {
+      view.addAssistantMessage("Token hết hạn. Vui lòng đăng nhập lại trong Settings.");
+      return;
+    }
+
     if (!this.claudeClient) {
-      this.claudeClient = new ClaudeClient(this.settings.apiKey);
+      this.initClaudeClient();
+    }
+
+    if (!this.claudeClient) {
+      view.addAssistantMessage("Không thể kết nối với Claude. Vui lòng đăng nhập lại.");
+      return;
     }
 
     const model = mode === "quick" ? this.settings.quickModel : this.settings.diveModel;
@@ -99,7 +142,7 @@ export default class LifeCompanionPlugin extends Plugin {
           streamEl.textContent = accumulatedText;
           view.scrollToBottom();
         },
-        onToolUse: (name, input) => {
+        onToolUse: (name) => {
           const toolMsg = `🔧 ${name}...`;
           if (!accumulatedText.includes(toolMsg)) {
             accumulatedText += `\n${toolMsg}\n`;
@@ -108,18 +151,15 @@ export default class LifeCompanionPlugin extends Plugin {
         },
       });
 
-      // Update conversation history
       this.conversationHistory.push(
         { role: "user", content: text },
         { role: "assistant", content: response }
       );
 
-      // Keep history manageable (last 20 messages)
       if (this.conversationHistory.length > 20) {
         this.conversationHistory = this.conversationHistory.slice(-20);
       }
 
-      // Save to chat history file
       const chatHistory = new ChatHistory(this.app);
       await chatHistory.saveMessage({ role: "user", content: text, timestamp: Date.now() });
       await chatHistory.saveMessage({ role: "assistant", content: response, timestamp: Date.now() });
@@ -136,12 +176,6 @@ export default class LifeCompanionPlugin extends Plugin {
 
   async saveSettings() {
     await this.saveData(this.settings);
-    if (this.settings.apiKey) {
-      if (this.claudeClient) {
-        this.claudeClient.updateApiKey(this.settings.apiKey);
-      } else {
-        this.claudeClient = new ClaudeClient(this.settings.apiKey);
-      }
-    }
+    this.initClaudeClient();
   }
 }

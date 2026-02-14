@@ -1,7 +1,7 @@
 import { App, Modal, Notice, PluginSettingTab, Setting } from "obsidian";
 import type LifeCompanionPlugin from "./main";
 import { MODEL_DISPLAY_NAMES, type ClaudeModel } from "./types";
-import { startOAuthFlow, exchangeCodeForApiKey, type OAuthState } from "./auth";
+import { startOAuthFlow, exchangeCodeForTokens, type OAuthState } from "./auth";
 
 export class LifeCompanionSettingTab extends PluginSettingTab {
   plugin: LifeCompanionPlugin;
@@ -20,13 +20,17 @@ export class LifeCompanionSettingTab extends PluginSettingTab {
     // Auth section
     containerEl.createEl("h3", { text: "Authentication" });
 
-    if (this.plugin.settings.apiKey) {
+    if (this.plugin.settings.authMode !== "none") {
       new Setting(containerEl)
         .setName("Status")
-        .setDesc("Đã kết nối với Claude API")
+        .setDesc(this.plugin.settings.authMode === "oauth" ? "Đã kết nối qua Claude (OAuth)" : "Đã kết nối qua API Key")
         .addButton((btn) =>
           btn.setButtonText("Đăng xuất").onClick(async () => {
+            this.plugin.settings.authMode = "none";
             this.plugin.settings.apiKey = "";
+            this.plugin.settings.accessToken = "";
+            this.plugin.settings.refreshToken = "";
+            this.plugin.settings.tokenExpiresAt = 0;
             await this.plugin.saveSettings();
             this.display();
           })
@@ -62,6 +66,7 @@ export class LifeCompanionSettingTab extends PluginSettingTab {
             .setValue(this.plugin.settings.apiKey)
             .onChange(async (value) => {
               this.plugin.settings.apiKey = value;
+              this.plugin.settings.authMode = value ? "apikey" : "none";
               await this.plugin.saveSettings();
             })
         );
@@ -161,8 +166,11 @@ class OAuthCodeModal extends Modal {
       statusEl.textContent = "Đang xác thực...";
 
       try {
-        const apiKey = await exchangeCodeForApiKey(code, this.oauthState);
-        this.plugin.settings.apiKey = apiKey;
+        const tokens = await exchangeCodeForTokens(code, this.oauthState);
+        this.plugin.settings.authMode = "oauth";
+        this.plugin.settings.accessToken = tokens.accessToken;
+        this.plugin.settings.refreshToken = tokens.refreshToken;
+        this.plugin.settings.tokenExpiresAt = tokens.expiresAt;
         await this.plugin.saveSettings();
         new Notice("Đăng nhập thành công!");
         this.close();

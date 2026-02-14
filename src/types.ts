@@ -2,15 +2,25 @@ export type ClaudeModel = "claude-haiku-4-5" | "claude-sonnet-4-5" | "claude-opu
 
 export type ChatMode = "quick" | "dive";
 
+export type AuthMode = "none" | "oauth" | "apikey";
+
 export interface LifeCompanionSettings {
+  authMode: AuthMode;
   apiKey: string;
+  accessToken: string;
+  refreshToken: string;
+  tokenExpiresAt: number;
   defaultModel: ClaudeModel;
   quickModel: ClaudeModel;
   diveModel: ClaudeModel;
 }
 
 export const DEFAULT_SETTINGS: LifeCompanionSettings = {
+  authMode: "none",
   apiKey: "",
+  accessToken: "",
+  refreshToken: "",
+  tokenExpiresAt: 0,
   defaultModel: "claude-sonnet-4-5",
   quickModel: "claude-haiku-4-5",
   diveModel: "claude-sonnet-4-5",

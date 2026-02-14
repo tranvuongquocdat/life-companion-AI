@@ -1,13 +1,18 @@
 const CLIENT_ID = "9d1c250a-e61b-44d9-88ed-5944d1962f5e";
 const REDIRECT_URI = "https://console.anthropic.com/oauth/code/callback";
-const SCOPES = "org:create_api_key user:profile user:inference";
-const AUTHORIZE_URL = "https://console.anthropic.com/oauth/authorize";
+const SCOPES = "user:inference user:profile";
+const AUTHORIZE_URL = "https://claude.ai/oauth/authorize";
 const TOKEN_URL = "https://console.anthropic.com/v1/oauth/token";
-const CREATE_API_KEY_URL = "https://api.anthropic.com/api/oauth/claude_cli/create_api_key";
 
 export interface OAuthState {
   state: string;
   verifier: string;
+}
+
+export interface OAuthTokens {
+  accessToken: string;
+  refreshToken: string;
+  expiresAt: number;
 }
 
 function base64urlEncode(buffer: Uint8Array): string {
@@ -52,13 +57,12 @@ export async function startOAuthFlow(): Promise<{ url: string; oauthState: OAuth
   };
 }
 
-export async function exchangeCodeForApiKey(
+export async function exchangeCodeForTokens(
   authCode: string,
   oauthState: OAuthState
-): Promise<string> {
+): Promise<OAuthTokens> {
   const cleanCode = authCode.split("#")[0].split("&")[0].trim();
 
-  // Step 1: Exchange code for access token
   const tokenResponse = await fetch(TOKEN_URL, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -77,23 +81,34 @@ export async function exchangeCodeForApiKey(
     throw new Error(`Token exchange failed (${tokenResponse.status}): ${err}`);
   }
 
-  const tokenData = await tokenResponse.json();
-  const accessToken = tokenData.access_token;
+  const data = await tokenResponse.json();
+  return {
+    accessToken: data.access_token,
+    refreshToken: data.refresh_token,
+    expiresAt: Date.now() + (data.expires_in || 28800) * 1000,
+  };
+}
 
-  // Step 2: Create permanent API key
-  const keyResponse = await fetch(CREATE_API_KEY_URL, {
+export async function refreshAccessToken(refreshToken: string): Promise<OAuthTokens> {
+  const tokenResponse = await fetch(TOKEN_URL, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${accessToken}`,
-    },
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      grant_type: "refresh_token",
+      client_id: CLIENT_ID,
+      refresh_token: refreshToken,
+    }),
   });
 
-  if (!keyResponse.ok) {
-    const err = await keyResponse.text();
-    throw new Error(`API key creation failed (${keyResponse.status}): ${err}`);
+  if (!tokenResponse.ok) {
+    const err = await tokenResponse.text();
+    throw new Error(`Token refresh failed (${tokenResponse.status}): ${err}`);
   }
 
-  const keyData = await keyResponse.json();
-  return keyData.raw_key;
+  const data = await tokenResponse.json();
+  return {
+    accessToken: data.access_token,
+    refreshToken: data.refresh_token,
+    expiresAt: Date.now() + (data.expires_in || 28800) * 1000,
+  };
 }

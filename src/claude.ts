@@ -17,12 +17,40 @@ interface SendMessageOptions {
 export class ClaudeClient {
   private client: Anthropic;
 
-  constructor(apiKey: string) {
-    this.client = new Anthropic({ apiKey, dangerouslyAllowBrowser: true });
+  constructor(options: { apiKey?: string; accessToken?: string }) {
+    if (options.accessToken) {
+      this.client = new Anthropic({
+        apiKey: options.accessToken,
+        dangerouslyAllowBrowser: true,
+        defaultHeaders: {
+          "Authorization": `Bearer ${options.accessToken}`,
+          "anthropic-beta": "oauth-2025-04-20",
+        },
+      });
+    } else {
+      this.client = new Anthropic({
+        apiKey: options.apiKey || "",
+        dangerouslyAllowBrowser: true,
+      });
+    }
   }
 
-  updateApiKey(apiKey: string) {
-    this.client = new Anthropic({ apiKey, dangerouslyAllowBrowser: true });
+  updateAuth(options: { apiKey?: string; accessToken?: string }) {
+    if (options.accessToken) {
+      this.client = new Anthropic({
+        apiKey: options.accessToken,
+        dangerouslyAllowBrowser: true,
+        defaultHeaders: {
+          "Authorization": `Bearer ${options.accessToken}`,
+          "anthropic-beta": "oauth-2025-04-20",
+        },
+      });
+    } else {
+      this.client = new Anthropic({
+        apiKey: options.apiKey || "",
+        dangerouslyAllowBrowser: true,
+      });
+    }
   }
 
   async sendMessage(options: SendMessageOptions): Promise<string> {
