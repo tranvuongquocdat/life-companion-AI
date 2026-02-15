@@ -38,6 +38,9 @@ export class ChatView extends ItemView {
   private thinkingBody: HTMLElement | null = null;
   private thinkingToolMap = new Map<string, HTMLElement>();
   private thinkingStopped = false;
+  private thinkingStartTime = 0;
+  private thinkingTimerInterval: ReturnType<typeof setInterval> | null = null;
+  private streamingEl: HTMLElement | null = null;
 
   // History panel
   private historyPanel: HTMLElement | null = null;
@@ -76,6 +79,8 @@ export class ChatView extends ItemView {
       model: this.selectedModel,
       createdAt: now,
       updatedAt: now,
+      totalInputTokens: 0,
+      totalOutputTokens: 0,
     };
   }
 
@@ -332,6 +337,8 @@ export class ChatView extends ItemView {
       model: this.plugin.settings.quickModel,
       createdAt: now,
       updatedAt: now,
+      totalInputTokens: 0,
+      totalOutputTokens: 0,
     };
 
     this.plugin.saveConversation(newConv);
@@ -1023,106 +1030,93 @@ export class ChatView extends ItemView {
 
   // ─── Thinking Container (Claude-style) ─────────────────────────
 
-  private static getToolDescription(name: string, input: Record<string, unknown>): string {
+  private getToolDescription(name: string, input: Record<string, unknown>): string {
+    const t = this.t;
     switch (name) {
       case "search_vault":
-        return `Searching vault for "${input.query}"`;
+        return t.toolSearching(String(input.query || ""));
       case "read_note":
-        return `Reading ${input.path}`;
+        return t.toolReading(String(input.path || ""));
       case "write_note":
-        return `Writing to ${input.path}`;
+        return t.toolWriting(String(input.path || ""));
       case "move_note":
-        return `Moving ${input.from} → ${input.to}`;
+        return t.toolMoving(String(input.from || ""), String(input.to || ""));
       case "list_folder":
-        return `Listing ${input.path || "/"}`;
+        return t.toolListing(String(input.path || "/"));
       case "get_recent_notes":
-        return `Getting notes from last ${input.days} days`;
+        return t.toolRecentNotes(input.days);
       case "web_search":
-        return `Searching web for "${input.query}"`;
+        return t.toolWebSearch(String(input.query || ""));
       case "web_fetch": {
         const url = String(input.url || "");
-        const short = url.length > 40 ? url.slice(0, 40) + "..." : url;
-        return `Fetching ${short}`;
+        return t.toolFetching(url.length > 40 ? url.slice(0, 40) + "..." : url);
       }
       case "append_note":
-        return `Appending to ${input.path}`;
+        return t.toolAppending(String(input.path || ""));
       case "read_properties":
-        return `Reading properties of ${input.path}`;
+        return t.toolReadingProps(String(input.path || ""));
       case "update_properties":
-        return `Updating properties of ${input.path}`;
+        return t.toolUpdatingProps(String(input.path || ""));
       case "get_tags":
-        return "Getting vault tags";
+        return t.toolGettingTags;
       case "search_by_tag":
-        return `Searching for tag ${input.tag}`;
+        return t.toolSearchingTag(String(input.tag || ""));
       case "get_vault_stats":
-        return "Getting vault statistics";
+        return t.toolVaultStats;
       case "get_backlinks":
-        return `Getting backlinks for ${input.path}`;
+        return t.toolBacklinks(String(input.path || ""));
       case "get_outgoing_links":
-        return `Getting outgoing links from ${input.path}`;
+        return t.toolOutgoing(String(input.path || ""));
       case "get_tasks":
-        return `Getting tasks from ${input.path || "vault"}`;
+        return t.toolGettingTasks(String(input.path || "vault"));
       case "toggle_task":
-        return `Toggling task at ${input.path}:${input.line}`;
+        return t.toolTogglingTask;
       case "get_daily_note":
-        return `Reading daily note${input.date ? " for " + input.date : ""}`;
+        return t.toolDailyRead(input.date as string | undefined);
       case "create_daily_note":
-        return `Creating daily note${input.date ? " for " + input.date : ""}`;
+        return t.toolDailyCreate(input.date as string | undefined);
       case "check_calendar_status":
-        return "Checking calendar status";
-      case "get_events":
-        return `Getting events${input.date ? " for " + input.date : ""}${input.startDate ? " from " + input.startDate + " to " + input.endDate : ""}`;
+        return t.toolCalendarCheck;
+      case "get_events": {
+        const detail = input.date ? ` ${input.date}` : input.startDate ? ` ${input.startDate}–${input.endDate}` : "";
+        return t.toolGettingEvents(detail);
+      }
       case "create_event":
-        return `Creating event "${input.title}" on ${input.date}`;
+        return t.toolCreatingEvent(String(input.title || ""), String(input.date || ""));
       case "update_event":
-        return `Updating event ${input.path}`;
+        return t.toolUpdatingEvent;
       case "delete_event":
-        return `Deleting event ${input.path}`;
+        return t.toolDeletingEvent;
       case "get_upcoming_events":
-        return `Getting upcoming events (${input.days || 7} days)`;
+        return t.toolUpcoming(input.days || 7);
       default:
-        return `Using ${name}`;
+        return t.toolUsing(name);
     }
   }
-
-  private static readonly TOOL_DONE_NAMES: Record<string, string> = {
-    search_vault: "Searched vault",
-    read_note: "Read note",
-    write_note: "Wrote note",
-    move_note: "Moved note",
-    list_folder: "Listed folder",
-    get_recent_notes: "Got recent notes",
-    web_search: "Web search done",
-    web_fetch: "Fetched page",
-    append_note: "Appended to note",
-    read_properties: "Read properties",
-    update_properties: "Updated properties",
-    get_tags: "Got tags",
-    search_by_tag: "Searched by tag",
-    get_vault_stats: "Got vault stats",
-    get_backlinks: "Got backlinks",
-    get_outgoing_links: "Got outgoing links",
-    get_tasks: "Got tasks",
-    toggle_task: "Toggled task",
-    get_daily_note: "Read daily note",
-    create_daily_note: "Created daily note",
-    check_calendar_status: "Checked calendar",
-    get_events: "Got events",
-    create_event: "Created event",
-    update_event: "Updated event",
-    delete_event: "Deleted event",
-    get_upcoming_events: "Got upcoming events",
-  };
 
   startThinking() {
     this.thinkingStopped = false;
     this.thinkingToolMap.clear();
+    this.thinkingStartTime = Date.now();
 
     this.thinkingEl = this.messagesContainer.createDiv({ cls: "lc-thinking" });
 
     const header = this.thinkingEl.createDiv({ cls: "lc-thinking-header" });
-    header.createSpan({ cls: "lc-thinking-dot" });
+
+    // Three bouncing dots
+    const dots = header.createDiv({ cls: "lc-thinking-dots" });
+    dots.createSpan();
+    dots.createSpan();
+    dots.createSpan();
+
     header.createSpan({ cls: "lc-thinking-label", text: this.t.thinking });
+
+    // Elapsed timer
+    const elapsed = header.createSpan({ cls: "lc-thinking-elapsed" });
+    this.thinkingTimerInterval = setInterval(() => {
+      const sec = Math.floor((Date.now() - this.thinkingStartTime) / 1000);
+      elapsed.textContent = sec < 60 ? `${sec}s` : `${Math.floor(sec / 60)}m${sec % 60}s`;
+    }, 1000);
 
     this.thinkingBody = this.thinkingEl.createDiv({ cls: "lc-thinking-body" });
 
@@ -1135,10 +1129,26 @@ export class ChatView extends ItemView {
     this.scrollToBottom();
   }
 
+  addThinkingContent(text: string) {
+    if (!this.thinkingBody) return;
+
+    let thinkingContent = this.thinkingBody.querySelector(".lc-thinking-content") as HTMLElement;
+    if (!thinkingContent) {
+      thinkingContent = this.thinkingBody.createDiv({ cls: "lc-thinking-content" });
+    }
+
+    const paragraph = thinkingContent.createDiv({ cls: "lc-thinking-text" });
+    const displayText = text.length > 500 ? text.slice(0, 500) + "..." : text;
+    paragraph.textContent = displayText;
+
+    const label = this.thinkingEl?.querySelector(".lc-thinking-label");
+    if (label) label.textContent = this.t.deepThinking;
+  }
+
   addToolCall(name: string, input: Record<string, unknown>) {
     if (!this.thinkingBody) return;
 
-    const desc = ChatView.getToolDescription(name, input);
+    const desc = this.getToolDescription(name, input);
     const item = this.thinkingBody.createDiv({ cls: "lc-thinking-tool" });
     item.createSpan({ cls: "lc-tool-spinner" });
     item.createSpan({ cls: "lc-thinking-tool-text", text: desc });
@@ -1173,7 +1183,7 @@ export class ChatView extends ItemView {
 
     // Update header label to show completed action
     const label = this.thinkingEl?.querySelector(".lc-thinking-label");
-    const doneName = ChatView.TOOL_DONE_NAMES[name] || name;
+    const doneName = this.t.toolDone[name] || name;
     if (label) label.textContent = doneName;
   }
 
@@ -1181,14 +1191,27 @@ export class ChatView extends ItemView {
     if (this.thinkingStopped || !this.thinkingEl) return;
     this.thinkingStopped = true;
 
-    const dot = this.thinkingEl.querySelector(".lc-thinking-dot");
-    if (dot) dot.remove();
+    // Stop elapsed timer
+    if (this.thinkingTimerInterval) {
+      clearInterval(this.thinkingTimerInterval);
+      this.thinkingTimerInterval = null;
+    }
+
+    // Remove bouncing dots
+    const dots = this.thinkingEl.querySelector(".lc-thinking-dots");
+    if (dots) dots.remove();
+
+    // Remove elapsed timer
+    const elapsed = this.thinkingEl.querySelector(".lc-thinking-elapsed");
+    if (elapsed) elapsed.remove();
 
     const label = this.thinkingEl.querySelector(".lc-thinking-label");
     const toolCount = this.thinkingToolMap.size;
 
-    if (toolCount === 0) {
-      // No tools were used — remove thinking container entirely
+    const hasThinkingContent = !!this.thinkingBody?.querySelector(".lc-thinking-content");
+
+    if (toolCount === 0 && !hasThinkingContent) {
+      // No tools and no thinking — remove thinking container entirely
       this.thinkingEl.remove();
       this.thinkingEl = null;
       return;
@@ -1197,7 +1220,13 @@ export class ChatView extends ItemView {
     this.thinkingEl.addClass("lc-thinking-done");
 
     if (label) {
-      label.textContent = this.t.usedTools(toolCount);
+      if (hasThinkingContent && toolCount > 0) {
+        label.textContent = `${this.t.deepThinking} · ${this.t.usedTools(toolCount)}`;
+      } else if (hasThinkingContent) {
+        label.textContent = this.t.deepThinking;
+      } else {
+        label.textContent = this.t.usedTools(toolCount);
+      }
     }
 
     // Add expand arrow — body stays open so user can see what was done
@@ -1205,6 +1234,11 @@ export class ChatView extends ItemView {
     arrow.className = "lc-thinking-arrow";
     arrow.textContent = "\u25BE"; // down arrow = expanded
     this.thinkingEl.querySelector(".lc-thinking-header")?.prepend(arrow);
+
+    // Auto-collapse thinking content after completion
+    if (this.thinkingBody && hasThinkingContent) {
+      this.thinkingBody.addClass("lc-collapsed");
+    }
   }
 
   // ─── History Panel ─────────────────────────────────────────────
@@ -1294,6 +1328,8 @@ export class ChatView extends ItemView {
       model: saved.model,
       createdAt: saved.createdAt,
       updatedAt: saved.updatedAt,
+      totalInputTokens: saved.totalInputTokens || 0,
+      totalOutputTokens: saved.totalOutputTokens || 0,
     };
     this.loadConversationState(conv);
   }
@@ -1428,9 +1464,17 @@ export class ChatView extends ItemView {
   }
 
   createStreamingMessage(): HTMLElement {
-    const el = this.messagesContainer.createDiv({ cls: "lc-msg lc-msg-assistant" });
+    const el = this.messagesContainer.createDiv({ cls: "lc-msg lc-msg-assistant lc-msg-streaming" });
+    this.streamingEl = el;
     this.scrollToBottom();
     return el;
+  }
+
+  stopStreaming() {
+    if (this.streamingEl) {
+      this.streamingEl.removeClass("lc-msg-streaming");
+      this.streamingEl = null;
+    }
   }
 
   async renderMarkdown(el: HTMLElement, text: string) {
@@ -1580,12 +1624,15 @@ export class ChatView extends ItemView {
     return Math.ceil(text.length / 3);
   }
 
-  private getConversationTokens(): number {
+  private getConversationTokens(): { tokens: number; isActual: boolean } {
+    if (this.conversation.lastKnownInputTokens && this.conversation.lastKnownInputTokens > 0) {
+      return { tokens: this.conversation.lastKnownInputTokens, isActual: true };
+    }
     let total = 500;
     for (const msg of this.conversation.history) {
       total += this.estimateTokens(msg.content);
     }
-    return total;
+    return { tokens: total, isActual: false };
   }
 
   private formatTokenCount(tokens: number): string {
@@ -1596,11 +1643,24 @@ export class ChatView extends ItemView {
 
   private updateTokenCounter() {
     if (!this.tokenCounterEl) return;
-    const used = this.getConversationTokens();
+    const { tokens: used, isActual } = this.getConversationTokens();
     const limit = MODEL_CONTEXT_LIMITS[this.selectedModel] || 200000;
     const ratio = used / limit;
 
-    this.tokenCounterEl.textContent = `~${this.formatTokenCount(used)} / ${this.formatTokenCount(limit)}`;
+    const prefix = isActual ? "" : "~";
+    this.tokenCounterEl.textContent = `${prefix}${this.formatTokenCount(used)} / ${this.formatTokenCount(limit)}`;
     this.tokenCounterEl.toggleClass("lc-token-warning", ratio > 0.7);
+    this.tokenCounterEl.toggleClass("lc-token-danger", ratio > 0.9);
+
+    if (this.conversation.totalInputTokens > 0) {
+      let tooltip = this.t.tokenUsageTooltip(
+        this.formatTokenCount(this.conversation.totalInputTokens),
+        this.formatTokenCount(this.conversation.totalOutputTokens),
+      );
+      if (this.conversation.lastCacheReadTokens && this.conversation.lastCacheReadTokens > 0) {
+        tooltip += ` | Cache: ${this.formatTokenCount(this.conversation.lastCacheReadTokens)}`;
+      }
+      this.tokenCounterEl.setAttribute("title", tooltip);
+    }
   }
 }

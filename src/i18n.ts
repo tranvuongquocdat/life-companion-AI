@@ -4,6 +4,7 @@ export interface I18n {
   // Chat UI
   greeting: string;
   thinking: string;
+  deepThinking: string;
   usedTools: (n: number) => string;
   quickMode: string;
   deepDive: string;
@@ -99,11 +100,43 @@ export interface I18n {
   calendarSaving: string;
   calendarSaveError: (msg: string) => string;
   calendarRecurring: string;
+  tokenUsageTooltip: (input: string, output: string) => string;
+
+  // Tool progress descriptions
+  toolSearching: (query: string) => string;
+  toolReading: (path: string) => string;
+  toolWriting: (path: string) => string;
+  toolMoving: (from: string, to: string) => string;
+  toolListing: (path: string) => string;
+  toolRecentNotes: (days: unknown) => string;
+  toolWebSearch: (query: string) => string;
+  toolFetching: (url: string) => string;
+  toolAppending: (path: string) => string;
+  toolReadingProps: (path: string) => string;
+  toolUpdatingProps: (path: string) => string;
+  toolGettingTags: string;
+  toolSearchingTag: (tag: string) => string;
+  toolVaultStats: string;
+  toolBacklinks: (path: string) => string;
+  toolOutgoing: (path: string) => string;
+  toolGettingTasks: (path: string) => string;
+  toolTogglingTask: string;
+  toolDailyRead: (date?: string) => string;
+  toolDailyCreate: (date?: string) => string;
+  toolCalendarCheck: string;
+  toolGettingEvents: (detail: string) => string;
+  toolCreatingEvent: (title: string, date: string) => string;
+  toolUpdatingEvent: string;
+  toolDeletingEvent: string;
+  toolUpcoming: (days: unknown) => string;
+  toolUsing: (name: string) => string;
+  toolDone: Record<string, string>;
 }
 
 const en: I18n = {
   greeting: "Hi! I'm Life Companion. Send a message, or type `/dive` for deep dive mode.",
-  thinking: "Thinking...",
+  thinking: "Thinking",
+  deepThinking: "Deep thinking",
   usedTools: (n) => `Used ${n} tool${n > 1 ? "s" : ""}`,
   quickMode: "Quick",
   deepDive: "Deep Dive",
@@ -190,11 +223,69 @@ const en: I18n = {
   calendarSaving: "Saving...",
   calendarSaveError: (msg) => `Failed to save: ${msg}`,
   calendarRecurring: "Recurring",
+  tokenUsageTooltip: (input, output) => `Input: ${input} | Output: ${output}`,
+
+  toolSearching: (q) => `Searching vault for "${q}"`,
+  toolReading: (p) => `Reading ${p}`,
+  toolWriting: (p) => `Writing to ${p}`,
+  toolMoving: (f, t) => `Moving ${f} → ${t}`,
+  toolListing: (p) => `Listing ${p}`,
+  toolRecentNotes: (d) => `Getting notes from last ${d} days`,
+  toolWebSearch: (q) => `Searching web for "${q}"`,
+  toolFetching: (u) => `Fetching ${u}`,
+  toolAppending: (p) => `Appending to ${p}`,
+  toolReadingProps: (p) => `Reading properties of ${p}`,
+  toolUpdatingProps: (p) => `Updating properties of ${p}`,
+  toolGettingTags: "Getting vault tags",
+  toolSearchingTag: (t) => `Searching for tag ${t}`,
+  toolVaultStats: "Getting vault statistics",
+  toolBacklinks: (p) => `Getting backlinks for ${p}`,
+  toolOutgoing: (p) => `Getting outgoing links from ${p}`,
+  toolGettingTasks: (p) => `Getting tasks from ${p}`,
+  toolTogglingTask: "Toggling task",
+  toolDailyRead: (d) => `Reading daily note${d ? " for " + d : ""}`,
+  toolDailyCreate: (d) => `Creating daily note${d ? " for " + d : ""}`,
+  toolCalendarCheck: "Checking calendar status",
+  toolGettingEvents: (d) => `Getting events${d}`,
+  toolCreatingEvent: (t, d) => `Creating event "${t}" on ${d}`,
+  toolUpdatingEvent: "Updating event",
+  toolDeletingEvent: "Deleting event",
+  toolUpcoming: (d) => `Getting upcoming events (${d} days)`,
+  toolUsing: (n) => `Using ${n}`,
+  toolDone: {
+    search_vault: "Searched vault",
+    read_note: "Read note",
+    write_note: "Wrote note",
+    move_note: "Moved note",
+    list_folder: "Listed folder",
+    get_recent_notes: "Got recent notes",
+    web_search: "Web search done",
+    web_fetch: "Fetched page",
+    append_note: "Appended to note",
+    read_properties: "Read properties",
+    update_properties: "Updated properties",
+    get_tags: "Got tags",
+    search_by_tag: "Searched by tag",
+    get_vault_stats: "Got vault stats",
+    get_backlinks: "Got backlinks",
+    get_outgoing_links: "Got outgoing links",
+    get_tasks: "Got tasks",
+    toggle_task: "Toggled task",
+    get_daily_note: "Read daily note",
+    create_daily_note: "Created daily note",
+    check_calendar_status: "Checked calendar",
+    get_events: "Got events",
+    create_event: "Created event",
+    update_event: "Updated event",
+    delete_event: "Deleted event",
+    get_upcoming_events: "Got upcoming events",
+  },
 };
 
 const vi: I18n = {
   greeting: "Chào bạn! Mình là Life Companion. Hãy nhắn gì đó, hoặc gõ `/dive` để vào chế độ deep dive.",
   thinking: "Đang xử lý...",
+  deepThinking: "Suy nghĩ sâu...",
   usedTools: (n) => `Đã dùng ${n} tool${n > 1 ? "s" : ""}`,
   quickMode: "Quick",
   deepDive: "Deep Dive",
@@ -281,6 +372,63 @@ const vi: I18n = {
   calendarSaving: "Đang lưu...",
   calendarSaveError: (msg) => `Lỗi khi lưu: ${msg}`,
   calendarRecurring: "Lặp lại",
+  tokenUsageTooltip: (input, output) => `Đầu vào: ${input} | Đầu ra: ${output}`,
+
+  toolSearching: (q) => `Đang tìm "${q}"`,
+  toolReading: (p) => `Đang đọc ${p}`,
+  toolWriting: (p) => `Đang ghi ${p}`,
+  toolMoving: (f, t) => `Đang di chuyển ${f} → ${t}`,
+  toolListing: (p) => `Đang liệt kê ${p}`,
+  toolRecentNotes: (d) => `Đang lấy notes ${d} ngày qua`,
+  toolWebSearch: (q) => `Đang tìm trên web "${q}"`,
+  toolFetching: (u) => `Đang tải ${u}`,
+  toolAppending: (p) => `Đang thêm vào ${p}`,
+  toolReadingProps: (p) => `Đang đọc thuộc tính ${p}`,
+  toolUpdatingProps: (p) => `Đang cập nhật thuộc tính ${p}`,
+  toolGettingTags: "Đang lấy danh sách tags",
+  toolSearchingTag: (t) => `Đang tìm tag ${t}`,
+  toolVaultStats: "Đang lấy thống kê vault",
+  toolBacklinks: (p) => `Đang lấy backlinks của ${p}`,
+  toolOutgoing: (p) => `Đang lấy outgoing links từ ${p}`,
+  toolGettingTasks: (p) => `Đang lấy tasks từ ${p}`,
+  toolTogglingTask: "Đang chuyển trạng thái task",
+  toolDailyRead: (d) => `Đang đọc daily note${d ? " ngày " + d : ""}`,
+  toolDailyCreate: (d) => `Đang tạo daily note${d ? " ngày " + d : ""}`,
+  toolCalendarCheck: "Đang kiểm tra lịch",
+  toolGettingEvents: (d) => `Đang lấy sự kiện${d}`,
+  toolCreatingEvent: (t, d) => `Đang tạo sự kiện "${t}" ngày ${d}`,
+  toolUpdatingEvent: "Đang cập nhật sự kiện",
+  toolDeletingEvent: "Đang xóa sự kiện",
+  toolUpcoming: (d) => `Đang lấy sự kiện sắp tới (${d} ngày)`,
+  toolUsing: (n) => `Đang dùng ${n}`,
+  toolDone: {
+    search_vault: "Đã tìm xong",
+    read_note: "Đã đọc note",
+    write_note: "Đã ghi note",
+    move_note: "Đã di chuyển note",
+    list_folder: "Đã liệt kê",
+    get_recent_notes: "Đã lấy notes gần đây",
+    web_search: "Đã tìm trên web",
+    web_fetch: "Đã tải trang",
+    append_note: "Đã thêm vào note",
+    read_properties: "Đã đọc thuộc tính",
+    update_properties: "Đã cập nhật thuộc tính",
+    get_tags: "Đã lấy tags",
+    search_by_tag: "Đã tìm theo tag",
+    get_vault_stats: "Đã lấy thống kê",
+    get_backlinks: "Đã lấy backlinks",
+    get_outgoing_links: "Đã lấy outgoing links",
+    get_tasks: "Đã lấy tasks",
+    toggle_task: "Đã chuyển task",
+    get_daily_note: "Đã đọc daily note",
+    create_daily_note: "Đã tạo daily note",
+    check_calendar_status: "Đã kiểm tra lịch",
+    get_events: "Đã lấy sự kiện",
+    create_event: "Đã tạo sự kiện",
+    update_event: "Đã cập nhật sự kiện",
+    delete_event: "Đã xóa sự kiện",
+    get_upcoming_events: "Đã lấy sự kiện sắp tới",
+  },
 };
 
 const STRINGS: Record<Language, I18n> = { en, vi };

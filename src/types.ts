@@ -99,6 +99,13 @@ export const MODEL_CONTEXT_LIMITS: Record<string, number> = {
   "llama-3.1-8b-instant": 128000,
 };
 
+export const SUMMARIZE_MODEL_PREFERENCE: Record<AIProvider, string[]> = {
+  claude: ["claude-haiku-4-5", "claude-sonnet-4-5"],
+  openai: ["gpt-4.1-nano", "gpt-4.1-mini", "gpt-5-nano"],
+  gemini: ["gemini-2.5-flash", "gemini-3-flash-preview"],
+  groq: ["llama-3.1-8b-instant", "llama-3.3-70b-versatile"],
+};
+
 export function getProvider(model: AIModel): AIProvider {
   if (model.startsWith("claude-")) return "claude";
   if (model.startsWith("gpt-") || model.startsWith("o3") || model.startsWith("o4") || model.startsWith("o1")) return "openai";
@@ -263,6 +270,18 @@ export interface SimpleMessage {
   content: string;
 }
 
+export interface TokenUsage {
+  inputTokens: number;
+  outputTokens: number;
+  cacheCreationInputTokens?: number;
+  cacheReadInputTokens?: number;
+}
+
+export interface AIResponse {
+  text: string;
+  usage: TokenUsage;
+}
+
 export interface ConversationState {
   id: string;
   title: string;
@@ -272,6 +291,11 @@ export interface ConversationState {
   model: AIModel;
   createdAt: number;
   updatedAt: number;
+  totalInputTokens: number;
+  totalOutputTokens: number;
+  lastKnownInputTokens?: number;
+  lastCacheReadTokens?: number;
+  lastCacheCreationTokens?: number;
 }
 
 export interface SavedConversation {
@@ -282,4 +306,6 @@ export interface SavedConversation {
   model: AIModel;
   createdAt: number;
   updatedAt: number;
+  totalInputTokens?: number;
+  totalOutputTokens?: number;
 }

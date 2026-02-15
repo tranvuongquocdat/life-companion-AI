@@ -122,6 +122,8 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
+  -webkit-user-select: text;
+  user-select: text;
 }
 
 .lc-msg {
@@ -131,6 +133,9 @@
   font-size: 13px;
   line-height: 1.55;
   word-wrap: break-word;
+  -webkit-user-select: text;
+  user-select: text;
+  cursor: text;
 }
 
 .lc-msg-user {
@@ -364,6 +369,10 @@ body.lc-resizing {
   font-weight: 500;
 }
 
+.lc-token-counter.lc-token-danger {
+  color: var(--text-error);
+}
+
 /* ─── Input ────────────────────────────────────────────────── */
 
 .lc-input-wrapper {
@@ -452,23 +461,39 @@ body.lc-resizing {
   user-select: none;
 }
 
-.lc-thinking-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--interactive-accent);
-  animation: lc-pulse 1.2s ease-in-out infinite;
+.lc-thinking-dots {
+  display: flex;
+  gap: 3px;
+  align-items: center;
   flex-shrink: 0;
 }
 
-@keyframes lc-pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.3; }
+.lc-thinking-dots span {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--interactive-accent);
+  animation: lc-bounce 1.4s ease-in-out infinite;
+}
+
+.lc-thinking-dots span:nth-child(2) { animation-delay: 0.16s; }
+.lc-thinking-dots span:nth-child(3) { animation-delay: 0.32s; }
+
+@keyframes lc-bounce {
+  0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
+  40% { transform: scale(1); opacity: 1; }
 }
 
 .lc-thinking-label {
   font-weight: 500;
   font-size: 12px;
+}
+
+.lc-thinking-elapsed {
+  font-size: 10.5px;
+  color: var(--text-faint);
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
 }
 
 .lc-thinking-arrow {
@@ -504,6 +529,32 @@ body.lc-resizing {
   max-height: 0;
   opacity: 0;
   margin-top: 0;
+}
+
+/* ─── Extended Thinking Content ─────────────────────────── */
+
+.lc-thinking-content {
+  margin-top: 6px;
+  padding: 6px 8px;
+  background: var(--background-primary);
+  border-radius: 6px;
+  border: 1px solid var(--background-modifier-border);
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.lc-thinking-text {
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-faint);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.lc-thinking-text + .lc-thinking-text {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--background-modifier-border);
 }
 
 .lc-thinking-tool {
@@ -552,6 +603,21 @@ body.lc-resizing {
   white-space: nowrap;
   flex: 1;
   min-width: 0;
+}
+
+/* ─── Streaming Cursor ─────────────────────────────────── */
+
+.lc-msg-streaming::after {
+  content: "▍";
+  display: inline;
+  color: var(--interactive-accent);
+  animation: lc-blink 0.8s step-end infinite;
+  font-weight: 300;
+}
+
+@keyframes lc-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
 }
 
 /* ─── History Panel ──────────────────────────────────────── */

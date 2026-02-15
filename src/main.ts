@@ -9,6 +9,7 @@ import { refreshFromClaudeCode } from "./auth";
 import {
   DEFAULT_SETTINGS,
   MODEL_CONTEXT_LIMITS,
+  SUMMARIZE_MODEL_PREFERENCE,
   getEffectiveModelGroups,
   getProvider,
   type AIProvider,
@@ -22,6 +23,16 @@ import { VaultTools } from "./vault-tools";
 import { CalendarManager } from "./calendar-manager";
 import { VAULT_TOOLS, WEB_TOOLS, KNOWLEDGE_TOOLS, GRAPH_TOOLS, TASK_TOOLS, DAILY_TOOLS, CALENDAR_TOOLS, type ToolDefinition } from "./tool-definitions";
 import { getI18n } from "./i18n";
+
+/** Tools that create/modify vault content — used for hallucination detection */
+const WRITE_TOOLS = new Set([
+  "write_note", "append_note", "move_note",
+  "create_daily_note", "update_properties",
+  "create_event", "update_event", "delete_event",
+]);
+
+/** Pattern to detect when AI claims it wrote/created something */
+const WRITE_CLAIM_PATTERN = /(?:Đã (?:tạo|lưu|cập nhật|ghi|thêm|viết|sửa|di chuyển|xóa)|(?:Created|Saved|Updated|Written|Moved|Deleted|Added) (?:note|event|file|entry|daily))/i;
 
 function selectTools(message: string, mode: ChatMode, enabledTools: string[]): ToolDefinition[] {
   const ALL = [...VAULT_TOOLS, ...KNOWLEDGE_TOOLS, ...GRAPH_TOOLS, ...TASK_TOOLS, ...DAILY_TOOLS, ...CALENDAR_TOOLS, ...WEB_TOOLS];
@@ -138,6 +149,8 @@ export default class LifeCompanionPlugin extends Plugin {
       model: conv.model,
       createdAt: conv.createdAt,
       updatedAt: conv.updatedAt,
+      totalInputTokens: conv.totalInputTokens || 0,
+      totalOutputTokens: conv.totalOutputTokens || 0,
     };
     if (existing >= 0) {
       saved[existing] = entry;
@@ -208,8 +221,9 @@ export default class LifeCompanionPlugin extends Plugin {
       let accumulatedText = "";
       let thinkingStopped = false;
       const tools = selectTools(text, conversation.mode, this.settings.enabledTools);
+      const calledWriteTools = new Set<string>();
 
-      const response = await this.aiClient.sendMessage({
+      const aiResponse = await this.aiClient.sendMessage({
         userMessage: text,
         mode: conversation.mode,
         model: conversation.model,
@@ -229,14 +243,31 @@ export default class LifeCompanionPlugin extends Plugin {
           view.renderMarkdown(streamEl, accumulatedText);
           view.scrollToBottom();
         },
+        onThinking: (thinkingText) => {
+          view.addThinkingContent(thinkingText);
+          view.scrollToBottom();
+        },
         onToolUse: (name, input) => {
           view.addToolCall(name, input);
           view.scrollToBottom();
+          if (WRITE_TOOLS.has(name)) calledWriteTools.add(name);
         },
         onToolResult: (name, result) => {
           view.completeToolCall(name, result);
         },
       });
+      let response = aiResponse.text;
+      view.stopStreaming();
+
+      // ─── Hallucination detection: warn if AI claims writes without tool calls ───
+      if (calledWriteTools.size === 0 && WRITE_CLAIM_PATTERN.test(response)) {
+        const warning = this.settings.language === "vi"
+          ? "\n\n⚠️ *Lưu ý: Mình chưa thực sự gọi tool để lưu/tạo gì cả. Nếu bạn muốn lưu, hãy nhắc lại nhé!*"
+          : "\n\n⚠️ *Note: I didn't actually call any tool to save/create anything. If you want me to save, please ask again!*";
+        response += warning;
+        accumulatedText += warning;
+        view.renderMarkdown(streamEl, accumulatedText);
+      }
 
       if (!thinkingStopped) {
         view.stopThinking();
@@ -266,20 +297,23 @@ export default class LifeCompanionPlugin extends Plugin {
         { role: "assistant", content: response }
       );
 
-      // Token-based history trimming
-      const estimateTokens = (t: string) => Math.ceil(t.length / 3);
+      // Track actual token usage
+      conversation.totalInputTokens = (conversation.totalInputTokens || 0) + aiResponse.usage.inputTokens;
+      conversation.totalOutputTokens = (conversation.totalOutputTokens || 0) + aiResponse.usage.outputTokens;
+      conversation.lastKnownInputTokens = aiResponse.usage.inputTokens;
+      conversation.lastCacheReadTokens = aiResponse.usage.cacheReadInputTokens || 0;
+      conversation.lastCacheCreationTokens = aiResponse.usage.cacheCreationInputTokens || 0;
+
+      // ─── Context management: auto-summarize or hard-trim ──────────
       const limit = MODEL_CONTEXT_LIMITS[conversation.model] || 200000;
+      const currentContext = aiResponse.usage.inputTokens > 0
+        ? aiResponse.usage.inputTokens
+        : this.estimateHistoryTokens(conversation);
 
-      let totalTokens = 500; // system prompt overhead
-      for (const msg of conversation.history) {
-        totalTokens += estimateTokens(msg.content);
-      }
-
-      while (totalTokens > limit * 0.7 && conversation.history.length > 2) {
-        const removed = conversation.history.splice(0, 2); // remove oldest pair
-        for (const msg of removed) {
-          totalTokens -= estimateTokens(msg.content);
-        }
+      if (currentContext > limit * 0.6 && conversation.history.length > 6) {
+        await this.autoSummarize(conversation, provider);
+      } else if (currentContext > limit * 0.85 && conversation.history.length > 2) {
+        this.hardTrimHistory(conversation, limit);
       }
 
       const chatHistory = new ChatHistory(this.app);
@@ -291,10 +325,82 @@ export default class LifeCompanionPlugin extends Plugin {
       });
     } catch (error) {
       view.stopThinking();
+      view.stopStreaming();
       const msg = error instanceof Error ? error.message : "Unknown error";
       view.addAssistantMessage(t.error(msg));
       new Notice(`Life Companion: ${msg}`);
     }
+  }
+
+  // ─── Context management helpers ──────────────────────────────────
+
+  private estimateHistoryTokens(conversation: ConversationState): number {
+    let total = 500;
+    for (const msg of conversation.history) {
+      total += Math.ceil(msg.content.length / 3);
+    }
+    return total;
+  }
+
+  private hardTrimHistory(conversation: ConversationState, limit: number) {
+    const est = (t: string) => Math.ceil(t.length / 3);
+    let total = 500;
+    for (const msg of conversation.history) total += est(msg.content);
+    while (total > limit * 0.7 && conversation.history.length > 2) {
+      const removed = conversation.history.splice(0, 2);
+      for (const msg of removed) total -= est(msg.content);
+    }
+  }
+
+  private async autoSummarize(conversation: ConversationState, currentProvider: AIProvider) {
+    const keepRecent = 4; // keep last 2 exchanges
+    if (conversation.history.length <= keepRecent + 2) return;
+
+    const toSummarize = conversation.history.slice(0, conversation.history.length - keepRecent);
+
+    const target = this.getSummarizeModel(currentProvider);
+    if (!target) {
+      const limit = MODEL_CONTEXT_LIMITS[conversation.model] || 200000;
+      this.hardTrimHistory(conversation, limit);
+      return;
+    }
+
+    try {
+      const { SUMMARIZE_PROMPT } = await import("./prompts");
+      const conversationText = toSummarize
+        .map((m) => `${m.role === "user" ? "User" : "Assistant"}: ${m.content}`)
+        .join("\n\n");
+
+      const summaryResponse = await this.aiClient.summarize(
+        conversationText, SUMMARIZE_PROMPT, target.provider, target.model,
+      );
+
+      const recent = conversation.history.slice(conversation.history.length - keepRecent);
+      conversation.history = [
+        { role: "assistant", content: `[Context Summary]\n${summaryResponse.text}` },
+        ...recent,
+      ];
+
+      conversation.totalInputTokens = (conversation.totalInputTokens || 0) + summaryResponse.usage.inputTokens;
+      conversation.totalOutputTokens = (conversation.totalOutputTokens || 0) + summaryResponse.usage.outputTokens;
+    } catch (error) {
+      console.warn("Auto-summarize failed, falling back to trim:", error);
+      const limit = MODEL_CONTEXT_LIMITS[conversation.model] || 200000;
+      this.hardTrimHistory(conversation, limit);
+    }
+  }
+
+  private getSummarizeModel(currentProvider: AIProvider): { model: string; provider: AIProvider } | null {
+    if (this.hasCredentialsFor(currentProvider)) {
+      const prefs = SUMMARIZE_MODEL_PREFERENCE[currentProvider];
+      if (prefs.length > 0) return { model: prefs[0], provider: currentProvider };
+    }
+    for (const p of ["groq", "gemini", "openai", "claude"] as AIProvider[]) {
+      if (p === currentProvider || !this.hasCredentialsFor(p)) continue;
+      const prefs = SUMMARIZE_MODEL_PREFERENCE[p];
+      if (prefs.length > 0) return { model: prefs[0], provider: p };
+    }
+    return null;
   }
 
   async loadSettings() {
