@@ -18,6 +18,7 @@ import {
   type ConversationState,
   type LifeCompanionSettings,
   type SavedConversation,
+  type SimpleMessage,
 } from "./types";
 import { VaultTools } from "./vault-tools";
 import { CalendarManager } from "./calendar-manager";
@@ -303,15 +304,85 @@ export default class LifeCompanionPlugin extends Plugin {
       let response = aiResponse.text;
       view.stopStreaming();
 
-      // ─── Hallucination detection: warn if AI claims writes without successful tool calls ───
+      // ─── Hallucination detection: auto-retry if AI claims writes without successful tool calls ───
       const hasSuccessfulWrite = [...writeToolResults.values()].some(v => v);
       if (!hasSuccessfulWrite && WRITE_CLAIM_PATTERN.test(response)) {
-        const warning = this.settings.language === "vi"
-          ? "\n\n⚠️ *Lưu ý: Mình chưa thực sự lưu/tạo gì thành công. Nếu bạn muốn lưu, hãy nhắc lại nhé!*"
-          : "\n\n⚠️ *Note: I didn't successfully save/create anything. If you want me to save, please ask again!*";
-        response += warning;
-        accumulatedText += warning;
+        // Show correction notice while retrying
+        const retryNotice = this.settings.language === "vi"
+          ? "\n\n🔄 *Phát hiện chưa gọi tool — đang tự sửa...*"
+          : "\n\n🔄 *Detected missing tool call — auto-correcting...*";
+        accumulatedText += retryNotice;
         view.renderMarkdown(streamEl, accumulatedText);
+
+        // Build correction context: add the hallucinated response + correction instruction
+        const correctionMsg = this.settings.language === "vi"
+          ? "Bạn vừa trả lời rằng đã lưu/tạo nhưng thực tế CHƯA gọi tool nào. Hãy gọi tool ngay bây giờ để thực hiện đúng yêu cầu. KHÔNG được nói lại, chỉ gọi tool và báo kết quả."
+          : "You just claimed to have saved/created something but you did NOT actually call any tool. Call the appropriate tool NOW to fulfill the request. Do NOT repeat yourself, just call the tool and report the result.";
+        const retryHistory: SimpleMessage[] = [
+          ...conversation.history,
+          { role: "user", content: text },
+          { role: "assistant", content: response },
+        ];
+
+        // Retry with correction context — re-enable thinking for tool visibility
+        view.startThinking();
+        let retryThinkingStopped = false;
+        const retryWriteResults = new Map<string, boolean>();
+        let retryText = "";
+        const retryResponse = await this.aiClient.sendMessage({
+          userMessage: correctionMsg,
+          mode: conversation.mode,
+          model: conversation.model,
+          provider,
+          systemPrompt,
+          conversationHistory: retryHistory,
+          vaultTools: this.vaultTools,
+          calendarManager: this.calendarManager,
+          tools,
+          attachments: [],
+          onText: (chunk) => {
+            if (!retryThinkingStopped) {
+              view.stopThinking();
+              retryThinkingStopped = true;
+            }
+            retryText += chunk;
+            // Replace the correction notice with the retry response
+            view.renderMarkdown(streamEl, retryText);
+            view.scrollToBottom();
+          },
+          onThinking: () => {},
+          onToolUse: (name, input) => {
+            view.addToolCall(name, input);
+            view.scrollToBottom();
+          },
+          onToolResult: (name, result) => {
+            view.completeToolCall(name, result);
+            if (WRITE_TOOLS.has(name)) {
+              const succeeded = !result.startsWith("Error") && !result.includes("not available");
+              retryWriteResults.set(name, succeeded);
+            }
+          },
+        });
+        if (!retryThinkingStopped) view.stopThinking();
+
+        // Use the retry response instead
+        response = retryResponse.text;
+        accumulatedText = retryText;
+
+        // If retry also failed, show final warning
+        const retrySucceeded = [...retryWriteResults.values()].some(v => v);
+        if (!retrySucceeded && WRITE_CLAIM_PATTERN.test(response)) {
+          const warning = this.settings.language === "vi"
+            ? "\n\n⚠️ *Lưu ý: Vẫn chưa thực sự lưu/tạo gì thành công. Hãy nhắc lại yêu cầu nhé!*"
+            : "\n\n⚠️ *Note: Still didn't successfully save/create anything. Please ask again!*";
+          response += warning;
+          accumulatedText += warning;
+          view.renderMarkdown(streamEl, accumulatedText);
+        }
+
+        // Track retry token usage
+        conversation.totalInputTokens = (conversation.totalInputTokens || 0) + retryResponse.usage.inputTokens;
+        conversation.totalOutputTokens = (conversation.totalOutputTokens || 0) + retryResponse.usage.outputTokens;
       }
 
       if (!thinkingStopped) {

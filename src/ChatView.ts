@@ -36,7 +36,7 @@ export class ChatView extends ItemView {
   // Thinking state
   private thinkingEl: HTMLElement | null = null;
   private thinkingBody: HTMLElement | null = null;
-  private thinkingToolMap = new Map<string, HTMLElement>();
+  private thinkingToolQueue = new Map<string, HTMLElement[]>();
   private thinkingStopped = false;
   private thinkingStartTime = 0;
   private thinkingTimerInterval: ReturnType<typeof setInterval> | null = null;
@@ -123,6 +123,25 @@ export class ChatView extends ItemView {
 
     // ─── Messages ───────────────────────────────────────────────
     this.messagesContainer = container.createDiv({ cls: "lc-messages" });
+
+    // Event delegation for [[wiki links]] — handles all internal links in messages
+    this.messagesContainer.addEventListener("click", (e) => {
+      const link = (e.target as HTMLElement).closest("a.internal-link");
+      if (!link) return;
+      e.preventDefault();
+      const href = link.getAttribute("data-href") || link.getAttribute("href");
+      if (!href) return;
+      // Check if note is already open in a tab
+      const existing = this.app.workspace.getLeavesOfType("markdown").find((leaf) => {
+        const file = (leaf.view as any)?.file; // eslint-disable-line @typescript-eslint/no-explicit-any
+        return file && (file.path === href || file.path === href + ".md" || file.basename === href);
+      });
+      if (existing) {
+        this.app.workspace.setActiveLeaf(existing, { focus: true });
+      } else {
+        this.app.workspace.openLinkText(href, "", "tab");
+      }
+    });
 
     // ─── Calendar View (hidden by default) ────────────────────
     this.calendarContainer = container.createDiv({ cls: "lc-calendar-view lc-hidden" });
@@ -1117,7 +1136,7 @@ export class ChatView extends ItemView {
 
   startThinking() {
     this.thinkingStopped = false;
-    this.thinkingToolMap.clear();
+    this.thinkingToolQueue.clear();
     this.thinkingStartTime = Date.now();
 
     this.thinkingEl = this.messagesContainer.createDiv({ cls: "lc-thinking" });
@@ -1178,13 +1197,16 @@ export class ChatView extends ItemView {
     const label = this.thinkingEl?.querySelector(".lc-thinking-label");
     if (label) label.textContent = desc;
 
-    this.thinkingToolMap.set(name, item);
+    const queue = this.thinkingToolQueue.get(name) || [];
+    queue.push(item);
+    this.thinkingToolQueue.set(name, queue);
     this.scrollToBottom();
   }
 
   completeToolCall(name: string, result: string) {
-    const item = this.thinkingToolMap.get(name);
-    if (!item) return;
+    const queue = this.thinkingToolQueue.get(name);
+    if (!queue || queue.length === 0) return;
+    const item = queue.shift()!;
 
     item.addClass("lc-thinking-tool-done");
 
@@ -1227,7 +1249,7 @@ export class ChatView extends ItemView {
     if (elapsed) elapsed.remove();
 
     const label = this.thinkingEl.querySelector(".lc-thinking-label");
-    const toolCount = this.thinkingToolMap.size;
+    const toolCount = this.thinkingToolQueue.size;
 
     const hasThinkingContent = !!this.thinkingBody?.querySelector(".lc-thinking-content");
 
@@ -1501,24 +1523,7 @@ export class ChatView extends ItemView {
   async renderMarkdown(el: HTMLElement, text: string) {
     el.empty();
     await MarkdownRenderer.render(this.app, text, el, "", this);
-    // Make [[wiki links]] clickable — open or reveal the referenced note
-    el.querySelectorAll("a.internal-link").forEach((linkEl) => {
-      linkEl.addEventListener("click", (e) => {
-        e.preventDefault();
-        const href = linkEl.getAttribute("href");
-        if (!href) return;
-        // Check if note is already open in a tab
-        const existing = this.app.workspace.getLeavesOfType("markdown").find((leaf) => {
-          const file = (leaf.view as any)?.file;
-          return file && (file.path === href || file.path === href + ".md" || file.basename === href);
-        });
-        if (existing) {
-          this.app.workspace.setActiveLeaf(existing, { focus: true });
-        } else {
-          this.app.workspace.openLinkText(href, "", "tab");
-        }
-      });
-    });
+    // [[wiki links]] click handling is done via event delegation on messagesContainer
   }
 
   scrollToBottom() {

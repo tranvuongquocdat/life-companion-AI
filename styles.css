@@ -264,6 +264,13 @@
 .lc-msg-assistant a {
   color: var(--text-accent);
   text-decoration: underline;
+  cursor: pointer;
+}
+
+.lc-msg-assistant a.internal-link {
+  color: var(--text-accent);
+  text-decoration: underline;
+  cursor: pointer;
 }
 
 .lc-msg-assistant img {
