@@ -1364,3 +1364,108 @@ body.lc-resizing {
 .lc-cal-form-save:hover {
   opacity: 0.85;
 }
+
+.lc-cal-form-save:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+/* ─── Enhanced Event Form ──────────────────────────────── */
+
+.lc-cal-form-date-row {
+  flex-direction: row;
+  gap: 10px;
+}
+
+.lc-cal-form-col {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex: 1;
+}
+
+.lc-cal-form-col > label {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.lc-cal-form-select {
+  appearance: auto;
+  cursor: pointer;
+}
+
+/* Day-of-week pills for weekly recurrence */
+.lc-cal-day-pills-row {
+  flex-direction: row;
+  gap: 4px;
+  flex-wrap: wrap;
+  padding: 4px 0;
+}
+
+.lc-cal-day-pill {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 1.5px solid var(--background-modifier-border);
+  background: var(--background-primary);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+  padding: 0;
+  flex-shrink: 0;
+}
+
+.lc-cal-day-pill:hover {
+  border-color: var(--interactive-accent);
+  color: var(--text-normal);
+}
+
+.lc-cal-day-pill-active {
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+  border-color: var(--interactive-accent);
+}
+
+.lc-cal-day-pill-active:hover {
+  opacity: 0.85;
+}
+
+/* Recurrence end row */
+.lc-cal-form-recur-end-row {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.lc-cal-form-recur-end-row > label {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+/* Notes textarea */
+.lc-cal-form-textarea {
+  resize: vertical;
+  min-height: 48px;
+  max-height: 120px;
+  font-family: inherit;
+  line-height: 1.4;
+}
+
+/* Recurring event badge in event list */
+.lc-cal-event-recur-badge {
+  font-size: 9px;
+  padding: 1px 5px;
+  border-radius: 6px;
+  background: var(--background-modifier-border);
+  color: var(--text-faint);
+  flex-shrink: 0;
+}

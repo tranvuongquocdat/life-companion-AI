@@ -79,6 +79,21 @@ export interface I18n {
   calendarEventCreated: string;
   calendarEventUpdated: string;
   calendarEventDeleted: string;
+  calendarDate: string;
+  calendarEndDate: string;
+  calendarRepeat: string;
+  calendarRepeatNone: string;
+  calendarRepeatDaily: string;
+  calendarRepeatWeekly: string;
+  calendarRepeatMonthly: string;
+  calendarRepeatEnds: string;
+  calendarRepeatNever: string;
+  calendarRepeatUntil: string;
+  calendarNotes: string;
+  calendarNotesPlaceholder: string;
+  calendarSaving: string;
+  calendarSaveError: (msg: string) => string;
+  calendarRecurring: string;
 }
 
 const en: I18n = {
@@ -150,6 +165,21 @@ const en: I18n = {
   calendarEventCreated: "Event created!",
   calendarEventUpdated: "Event updated!",
   calendarEventDeleted: "Event deleted!",
+  calendarDate: "Date",
+  calendarEndDate: "End date",
+  calendarRepeat: "Repeat",
+  calendarRepeatNone: "Does not repeat",
+  calendarRepeatDaily: "Every day",
+  calendarRepeatWeekly: "Every week",
+  calendarRepeatMonthly: "Every month",
+  calendarRepeatEnds: "Ends",
+  calendarRepeatNever: "Never",
+  calendarRepeatUntil: "On date",
+  calendarNotes: "Notes",
+  calendarNotesPlaceholder: "Add notes...",
+  calendarSaving: "Saving...",
+  calendarSaveError: (msg) => `Failed to save: ${msg}`,
+  calendarRecurring: "Recurring",
 };
 
 const vi: I18n = {
@@ -221,6 +251,21 @@ const vi: I18n = {
   calendarEventCreated: "Đã tạo sự kiện!",
   calendarEventUpdated: "Đã cập nhật sự kiện!",
   calendarEventDeleted: "Đã xóa sự kiện!",
+  calendarDate: "Ngày",
+  calendarEndDate: "Ngày kết thúc",
+  calendarRepeat: "Lặp lại",
+  calendarRepeatNone: "Không lặp lại",
+  calendarRepeatDaily: "Hàng ngày",
+  calendarRepeatWeekly: "Hàng tuần",
+  calendarRepeatMonthly: "Hàng tháng",
+  calendarRepeatEnds: "Kết thúc",
+  calendarRepeatNever: "Không bao giờ",
+  calendarRepeatUntil: "Đến ngày",
+  calendarNotes: "Ghi chú",
+  calendarNotesPlaceholder: "Thêm ghi chú...",
+  calendarSaving: "Đang lưu...",
+  calendarSaveError: (msg) => `Lỗi khi lưu: ${msg}`,
+  calendarRecurring: "Lặp lại",
 };
 
 const STRINGS: Record<Language, I18n> = { en, vi };

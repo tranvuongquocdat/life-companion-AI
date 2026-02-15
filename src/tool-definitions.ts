@@ -317,6 +317,7 @@ export const CALENDAR_TOOLS: ToolDefinition[] = [
         daysOfWeek: { type: "array", items: { type: "string" }, description: "For recurring: days [U,M,T,W,R,F,S]" },
         startRecur: { type: "string", description: "Recurring start date" },
         endRecur: { type: "string", description: "Recurring end date" },
+        rrule: { type: "string", description: "RRULE string for complex recurrence, e.g. 'FREQ=MONTHLY;BYMONTHDAY=15'" },
         body: { type: "string", description: "Optional markdown body content" },
       },
       required: ["title", "date"],

@@ -12,7 +12,7 @@ export interface CalendarEvent {
   startTime?: string;
   endTime?: string;
   completed?: boolean;
-  daysOfWeek?: string[];
+  daysOfWeek?: (string | number)[];
   startRecur?: string;
   endRecur?: string;
   rrule?: string;
@@ -20,7 +20,7 @@ export interface CalendarEvent {
   skipDates?: string[];
 }
 
-const DOW_MAP: Record<string, number> = {
+const DOW_LETTER_MAP: Record<string, number> = {
   U: 0, M: 1, T: 2, W: 3, R: 4, F: 5, S: 6,
 };
 
@@ -29,6 +29,33 @@ export class CalendarManager {
     private app: App,
     private getSettingsDir?: () => string,
   ) {}
+
+  // ─── Cache Sync ───────────────────────────────────────────
+
+  private waitForFileCache(filePath: string, timeoutMs = 2000): Promise<void> {
+    return new Promise<void>((resolve) => {
+      const file = this.app.vault.getAbstractFileByPath(filePath);
+      if (file instanceof TFile) {
+        const existing = this.app.metadataCache.getFileCache(file);
+        if (existing?.frontmatter) { resolve(); return; }
+      }
+      const timer = setTimeout(() => {
+        this.app.metadataCache.off("changed", handler);
+        resolve();
+      }, timeoutMs);
+      const handler = (changedFile: TFile) => {
+        if (changedFile.path === filePath) {
+          const cache = this.app.metadataCache.getFileCache(changedFile);
+          if (cache?.frontmatter) {
+            clearTimeout(timer);
+            this.app.metadataCache.off("changed", handler);
+            resolve();
+          }
+        }
+      };
+      this.app.metadataCache.on("changed", handler);
+    });
+  }
 
   // ─── Detection ──────────────────────────────────────────
 
@@ -102,7 +129,7 @@ export class CalendarManager {
     const dir = await this.getEventsDir();
     const events: CalendarEvent[] = [];
     for (const file of this.app.vault.getMarkdownFiles()) {
-      if (!file.path.startsWith(dir)) continue;
+      if (!file.path.startsWith(dir + "/")) continue;
       const cache = this.app.metadataCache.getFileCache(file);
       const fm = cache?.frontmatter;
       if (fm && fm.title) {
@@ -128,13 +155,22 @@ export class CalendarManager {
       if (event.endRecur && dateStr > event.endRecur) return false;
       if (!event.daysOfWeek) return false;
       const dow = date.getDay();
-      return event.daysOfWeek.some((d) => DOW_MAP[d] === dow);
+      return event.daysOfWeek.some((d) => {
+        if (typeof d === "number") return d === dow;
+        return DOW_LETTER_MAP[d as string] === dow;
+      });
     }
 
     if (event.type === "rrule") {
       if (event.startDate && dateStr < event.startDate) return false;
       if (event.skipDates?.includes(dateStr)) return false;
-      return true; // Simplified — full RRULE parsing not implemented
+      if (event.rrule) {
+        const monthlyMatch = event.rrule.match(/FREQ=MONTHLY;BYMONTHDAY=(\d+)/);
+        if (monthlyMatch) return date.getDate() === parseInt(monthlyMatch[1], 10);
+        const dailyMatch = event.rrule.match(/FREQ=DAILY/);
+        if (dailyMatch) return true;
+      }
+      return true; // fallback for unsupported rrule patterns
     }
 
     return false;
@@ -226,6 +262,7 @@ export class CalendarManager {
     daysOfWeek?: string[];
     startRecur?: string;
     endRecur?: string;
+    rrule?: string;
     body?: string;
   }): Promise<string> {
     const dir = await this.getEventsDir();
@@ -236,41 +273,45 @@ export class CalendarManager {
     const existing = this.app.vault.getAbstractFileByPath(filePath);
     if (existing) return `Event file already exists: ${filePath}. Use update_event instead.`;
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const fm: Record<string, any> = { title: params.title, type: params.type || "single" };
-
-    if (fm.type === "single") {
-      fm.date = params.date;
-      if (params.endDate) fm.endDate = params.endDate;
-      fm.allDay = params.allDay ?? !params.startTime;
-      if (params.startTime) fm.startTime = params.startTime;
-      if (params.endTime) fm.endTime = params.endTime;
-    } else if (fm.type === "recurring") {
-      if (params.daysOfWeek) fm.daysOfWeek = params.daysOfWeek;
-      if (params.startRecur) fm.startRecur = params.startRecur;
-      if (params.endRecur) fm.endRecur = params.endRecur;
-      if (params.startTime) fm.startTime = params.startTime;
-      if (params.endTime) fm.endTime = params.endTime;
-    }
-
-    const yamlLines = ["---"];
-    for (const [key, value] of Object.entries(fm)) {
-      if (Array.isArray(value)) {
-        yamlLines.push(`${key}: [${value.join(",")}]`);
-      } else if (typeof value === "boolean") {
-        yamlLines.push(`${key}: ${value}`);
-      } else {
-        yamlLines.push(`${key}: "${value}"`);
-      }
-    }
-    yamlLines.push("---");
-
-    const content = yamlLines.join("\n") + "\n\n" + (params.body || "");
+    // Create file with empty frontmatter, then use Obsidian's YAML serializer
+    const initialContent = "---\n---\n\n" + (params.body || "");
 
     const folder = this.app.vault.getAbstractFileByPath(dir);
     if (!folder) await this.app.vault.createFolder(dir);
 
-    await this.app.vault.create(filePath, content);
+    await this.app.vault.create(filePath, initialContent);
+
+    const createdFile = this.app.vault.getAbstractFileByPath(filePath);
+    if (createdFile && createdFile instanceof TFile) {
+      await this.app.fileManager.processFrontMatter(createdFile, (fm) => {
+        fm.title = params.title;
+        fm.type = params.type || "single";
+
+        if (fm.type === "single") {
+          fm.date = params.date;
+          if (params.endDate) fm.endDate = params.endDate;
+          fm.allDay = params.allDay ?? !params.startTime;
+          if (params.startTime) fm.startTime = params.startTime;
+          if (params.endTime) fm.endTime = params.endTime;
+        } else if (fm.type === "recurring") {
+          if (params.daysOfWeek) {
+            fm.daysOfWeek = params.daysOfWeek.map((d: string) => DOW_LETTER_MAP[d] ?? parseInt(d, 10));
+          }
+          if (params.startRecur) fm.startRecur = params.startRecur;
+          if (params.endRecur) fm.endRecur = params.endRecur;
+          if (params.startTime) fm.startTime = params.startTime;
+          if (params.endTime) fm.endTime = params.endTime;
+          fm.allDay = params.allDay ?? !params.startTime;
+        } else if (fm.type === "rrule") {
+          if (params.rrule) fm.rrule = params.rrule;
+          fm.startDate = params.date;
+          if (params.startTime) fm.startTime = params.startTime;
+          if (params.endTime) fm.endTime = params.endTime;
+        }
+      });
+    }
+
+    await this.waitForFileCache(filePath);
     return `Created event: ${filePath}`;
   }
 
@@ -281,9 +322,14 @@ export class CalendarManager {
     if (!file || !(file instanceof TFile)) return `Event file not found: ${path}`;
     await this.app.fileManager.processFrontMatter(file, (fm) => {
       for (const [key, value] of Object.entries(properties)) {
-        fm[key] = value;
+        if (value === null || value === undefined) {
+          delete fm[key];
+        } else {
+          fm[key] = value;
+        }
       }
     });
+    await this.waitForFileCache(path);
     return `Updated event: ${path}`;
   }
 

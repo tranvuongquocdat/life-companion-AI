@@ -16,6 +16,7 @@ import {
   type SavedConversation,
 } from "./types";
 import { getI18n, type I18n } from "./i18n";
+import type { CalendarEvent } from "./calendar-manager";
 
 export const VIEW_TYPE_CHAT = "life-companion-chat";
 
@@ -517,6 +518,10 @@ export class ChatView extends ItemView {
           if (time) item.createSpan({ cls: "lc-cal-event-time", text: time });
           item.createSpan({ cls: "lc-cal-event-title", text: event.title });
 
+          if (event.type === "recurring" || event.type === "rrule") {
+            item.createSpan({ cls: "lc-cal-event-recur-badge", text: this.t.calendarRecurring });
+          }
+
           if (event.completed) item.addClass("lc-cal-event-completed");
 
           // Action buttons (edit + delete)
@@ -546,16 +551,21 @@ export class ChatView extends ItemView {
 
   private async deleteCalendarEvent(filePath: string) {
     if (!confirm(this.t.calendarDeleteConfirm)) return;
-    const cm = this.plugin.calendarManager;
-    await cm.deleteEvent(filePath);
-    new Notice(this.t.calendarEventDeleted);
-    this.renderCalendar();
+    try {
+      const cm = this.plugin.calendarManager;
+      await cm.deleteEvent(filePath);
+      new Notice(this.t.calendarEventDeleted);
+      this.renderCalendar();
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : "Unknown error";
+      new Notice(this.t.calendarSaveError(msg));
+    }
   }
 
   private renderEventForm(
     container: HTMLElement,
     date: string,
-    existing?: { filePath: string; title: string; startTime?: string; endTime?: string; allDay?: boolean },
+    existing?: CalendarEvent,
   ) {
     // Remove any existing form
     container.querySelector(".lc-cal-event-form")?.remove();
@@ -563,7 +573,7 @@ export class ChatView extends ItemView {
     const isEdit = !!existing;
     const form = container.createDiv({ cls: "lc-cal-event-form" });
 
-    // Title
+    // ── Title ──
     const titleRow = form.createDiv({ cls: "lc-cal-form-row" });
     titleRow.createEl("label", { text: this.t.calendarEventTitle });
     const titleInput = titleRow.createEl("input", {
@@ -572,29 +582,38 @@ export class ChatView extends ItemView {
     });
     if (existing) titleInput.value = existing.title;
 
-    // Date
-    const dateRow = form.createDiv({ cls: "lc-cal-form-row" });
-    dateRow.createEl("label", { text: "Date" });
-    const dateInput = dateRow.createEl("input", {
+    // ── Date Row (start + end date) ──
+    const dateRow = form.createDiv({ cls: "lc-cal-form-row lc-cal-form-date-row" });
+    const startDateCol = dateRow.createDiv({ cls: "lc-cal-form-col" });
+    startDateCol.createEl("label", { text: this.t.calendarDate });
+    const dateInput = startDateCol.createEl("input", {
       cls: "lc-cal-form-input",
       attr: { type: "date" },
     });
-    dateInput.value = date;
+    dateInput.value = existing?.date || date;
 
-    // All day toggle
+    const endDateCol = dateRow.createDiv({ cls: "lc-cal-form-col" });
+    endDateCol.createEl("label", { text: this.t.calendarEndDate });
+    const endDateInput = endDateCol.createEl("input", {
+      cls: "lc-cal-form-input",
+      attr: { type: "date" },
+    });
+    if (existing?.endDate) endDateInput.value = existing.endDate;
+
+    // ── All day toggle ──
     const allDayRow = form.createDiv({ cls: "lc-cal-form-row lc-cal-form-row-inline" });
     const allDayLabel = allDayRow.createEl("label", { text: this.t.calendarAllDay });
     const allDayCheck = allDayRow.createEl("input", { attr: { type: "checkbox" } });
     allDayCheck.checked = existing ? (existing.allDay !== false) : true;
     allDayLabel.prepend(allDayCheck);
 
-    // Time row
+    // ── Time row ──
     const timeRow = form.createDiv({ cls: "lc-cal-form-row lc-cal-form-time-row" });
     const startInput = timeRow.createEl("input", {
       cls: "lc-cal-form-input lc-cal-form-time",
       attr: { type: "time" },
     });
-    timeRow.createSpan({ text: "—" });
+    timeRow.createSpan({ text: "\u2014" });
     const endInput = timeRow.createEl("input", {
       cls: "lc-cal-form-input lc-cal-form-time",
       attr: { type: "time" },
@@ -608,7 +627,104 @@ export class ChatView extends ItemView {
     allDayCheck.addEventListener("change", updateTimeVisibility);
     updateTimeVisibility();
 
-    // Buttons
+    // ── Repeat section ──
+    const repeatRow = form.createDiv({ cls: "lc-cal-form-row" });
+    repeatRow.createEl("label", { text: this.t.calendarRepeat });
+    const repeatSelect = repeatRow.createEl("select", { cls: "lc-cal-form-input lc-cal-form-select" });
+    const repeatOptions = [
+      { value: "none", label: this.t.calendarRepeatNone },
+      { value: "daily", label: this.t.calendarRepeatDaily },
+      { value: "weekly", label: this.t.calendarRepeatWeekly },
+      { value: "monthly", label: this.t.calendarRepeatMonthly },
+    ];
+    for (const opt of repeatOptions) {
+      repeatSelect.createEl("option", { value: opt.value, text: opt.label });
+    }
+
+    // Determine initial repeat value from existing event
+    if (existing?.type === "recurring" && existing.daysOfWeek) {
+      // Check if all 7 days = daily
+      const allDays = existing.daysOfWeek.length === 7;
+      repeatSelect.value = allDays ? "daily" : "weekly";
+    } else if (existing?.type === "rrule") {
+      repeatSelect.value = "monthly";
+    } else {
+      repeatSelect.value = "none";
+    }
+
+    // ── Weekly day pills ──
+    const dayPillsRow = form.createDiv({ cls: "lc-cal-form-row lc-cal-day-pills-row" });
+    const DOW_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+    const DOW_LETTER_TO_NUM: Record<string, number> = { U: 0, M: 1, T: 2, W: 3, R: 4, F: 5, S: 6 };
+    const selectedDays = new Set<number>();
+
+    // Pre-populate from existing event
+    if (existing?.daysOfWeek) {
+      for (const d of existing.daysOfWeek) {
+        if (typeof d === "number") selectedDays.add(d);
+        else if (DOW_LETTER_TO_NUM[d] !== undefined) selectedDays.add(DOW_LETTER_TO_NUM[d]);
+      }
+    }
+
+    for (let i = 0; i < 7; i++) {
+      const pill = dayPillsRow.createEl("button", {
+        cls: `lc-cal-day-pill${selectedDays.has(i) ? " lc-cal-day-pill-active" : ""}`,
+        text: DOW_LABELS[i].charAt(0),
+        attr: { "aria-label": DOW_LABELS[i] },
+      });
+      pill.addEventListener("click", (e) => {
+        e.preventDefault();
+        if (selectedDays.has(i)) {
+          selectedDays.delete(i);
+          pill.removeClass("lc-cal-day-pill-active");
+        } else {
+          selectedDays.add(i);
+          pill.addClass("lc-cal-day-pill-active");
+        }
+      });
+    }
+
+    // ── Recurrence end condition ──
+    const recurEndRow = form.createDiv({ cls: "lc-cal-form-row lc-cal-form-recur-end-row" });
+    recurEndRow.createEl("label", { text: this.t.calendarRepeatEnds });
+    const recurEndSelect = recurEndRow.createEl("select", { cls: "lc-cal-form-input lc-cal-form-select" });
+    recurEndSelect.createEl("option", { value: "never", text: this.t.calendarRepeatNever });
+    recurEndSelect.createEl("option", { value: "until", text: this.t.calendarRepeatUntil });
+
+    const recurEndDateInput = recurEndRow.createEl("input", {
+      cls: "lc-cal-form-input",
+      attr: { type: "date" },
+    });
+    if (existing?.endRecur) {
+      recurEndSelect.value = "until";
+      recurEndDateInput.value = existing.endRecur;
+    }
+
+    const updateRecurEndVisibility = () => {
+      recurEndDateInput.style.display = recurEndSelect.value === "until" ? "block" : "none";
+    };
+    recurEndSelect.addEventListener("change", updateRecurEndVisibility);
+    updateRecurEndVisibility();
+
+    // ── Show/hide recurrence fields based on repeat selection ──
+    const updateRepeatVisibility = () => {
+      const val = repeatSelect.value;
+      dayPillsRow.style.display = val === "weekly" ? "flex" : "none";
+      recurEndRow.style.display = val !== "none" ? "flex" : "none";
+      endDateCol.style.display = val === "none" ? "block" : "none";
+    };
+    repeatSelect.addEventListener("change", updateRepeatVisibility);
+    updateRepeatVisibility();
+
+    // ── Notes/Description ──
+    const notesRow = form.createDiv({ cls: "lc-cal-form-row" });
+    notesRow.createEl("label", { text: this.t.calendarNotes });
+    const notesInput = notesRow.createEl("textarea", {
+      cls: "lc-cal-form-input lc-cal-form-textarea",
+      attr: { placeholder: this.t.calendarNotesPlaceholder, rows: "3" },
+    });
+
+    // ── Buttons ──
     const btnRow = form.createDiv({ cls: "lc-cal-form-buttons" });
     const cancelBtn = btnRow.createEl("button", { cls: "lc-cal-form-cancel", text: this.t.calendarCancel });
     const saveBtn = btnRow.createEl("button", { cls: "lc-cal-form-save", text: this.t.calendarSave });
@@ -623,36 +739,103 @@ export class ChatView extends ItemView {
         return;
       }
 
-      const cm = this.plugin.calendarManager;
-      const eventDate = dateInput.value;
-      const isAllDay = allDayCheck.checked;
-      const startTime = isAllDay ? undefined : startInput.value || undefined;
-      const endTime = isAllDay ? undefined : endInput.value || undefined;
+      saveBtn.disabled = true;
+      saveBtn.textContent = this.t.calendarSaving;
 
-      if (isEdit && existing) {
-        // Update existing event
-        const props: Record<string, unknown> = { title };
-        if (eventDate !== date) props.date = eventDate;
-        props.allDay = isAllDay;
-        if (startTime) props.startTime = startTime;
-        else props.startTime = null;
-        if (endTime) props.endTime = endTime;
-        else props.endTime = null;
-        await cm.updateEvent(existing.filePath, props);
-        new Notice(this.t.calendarEventUpdated);
-      } else {
-        // Create new event
-        await cm.createEvent({
-          title,
-          date: eventDate,
-          allDay: isAllDay,
-          startTime,
-          endTime,
-        });
-        new Notice(this.t.calendarEventCreated);
+      try {
+        const cm = this.plugin.calendarManager;
+        const eventDate = dateInput.value;
+        const isAllDay = allDayCheck.checked;
+        const startTime = isAllDay ? undefined : startInput.value || undefined;
+        const endTime = isAllDay ? undefined : endInput.value || undefined;
+        const repeatValue = repeatSelect.value;
+        const body = notesInput.value.trim() || undefined;
+        const recurEndDate = recurEndSelect.value === "until" ? recurEndDateInput.value || undefined : undefined;
+
+        if (isEdit && existing) {
+          // Update existing event
+          const props: Record<string, unknown> = { title, allDay: isAllDay };
+          if (eventDate !== (existing.date || date)) props.date = eventDate;
+          props.startTime = startTime || null;
+          props.endTime = endTime || null;
+
+          if (repeatValue === "none") {
+            props.type = "single";
+            props.endDate = endDateInput.value || null;
+            props.daysOfWeek = null;
+            props.startRecur = null;
+            props.endRecur = null;
+            props.rrule = null;
+            props.startDate = null;
+          } else if (repeatValue === "daily") {
+            props.type = "recurring";
+            props.daysOfWeek = [0, 1, 2, 3, 4, 5, 6];
+            props.startRecur = eventDate;
+            props.endRecur = recurEndDate || null;
+            props.endDate = null;
+            props.rrule = null;
+            props.startDate = null;
+          } else if (repeatValue === "weekly") {
+            props.type = "recurring";
+            props.daysOfWeek = Array.from(selectedDays).sort();
+            props.startRecur = eventDate;
+            props.endRecur = recurEndDate || null;
+            props.endDate = null;
+            props.rrule = null;
+            props.startDate = null;
+          } else if (repeatValue === "monthly") {
+            const dayOfMonth = new Date(eventDate + "T00:00:00").getDate();
+            props.type = "rrule";
+            props.rrule = `FREQ=MONTHLY;BYMONTHDAY=${dayOfMonth}`;
+            props.startDate = eventDate;
+            props.endRecur = recurEndDate || null;
+            props.daysOfWeek = null;
+            props.startRecur = null;
+            props.endDate = null;
+          }
+
+          await cm.updateEvent(existing.filePath, props);
+          new Notice(this.t.calendarEventUpdated);
+        } else {
+          // Create new event
+          const NUM_TO_LETTER = ["U", "M", "T", "W", "R", "F", "S"];
+
+          if (repeatValue === "none") {
+            await cm.createEvent({
+              title, date: eventDate, allDay: isAllDay, startTime, endTime,
+              endDate: endDateInput.value || undefined, body,
+            });
+          } else if (repeatValue === "daily") {
+            await cm.createEvent({
+              title, date: eventDate, allDay: isAllDay, startTime, endTime,
+              type: "recurring", daysOfWeek: ["U", "M", "T", "W", "R", "F", "S"],
+              startRecur: eventDate, endRecur: recurEndDate, body,
+            });
+          } else if (repeatValue === "weekly") {
+            const daysOfWeek = Array.from(selectedDays).sort().map((n) => NUM_TO_LETTER[n]);
+            await cm.createEvent({
+              title, date: eventDate, allDay: isAllDay, startTime, endTime,
+              type: "recurring", daysOfWeek,
+              startRecur: eventDate, endRecur: recurEndDate, body,
+            });
+          } else if (repeatValue === "monthly") {
+            const dayOfMonth = new Date(eventDate + "T00:00:00").getDate();
+            await cm.createEvent({
+              title, date: eventDate, allDay: isAllDay, startTime, endTime,
+              type: "rrule", rrule: `FREQ=MONTHLY;BYMONTHDAY=${dayOfMonth}`, body,
+            });
+          }
+
+          new Notice(this.t.calendarEventCreated);
+        }
+
+        this.renderCalendar();
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : "Unknown error";
+        new Notice(this.t.calendarSaveError(msg));
+        saveBtn.disabled = false;
+        saveBtn.textContent = this.t.calendarSave;
       }
-
-      this.renderCalendar();
     });
 
     titleInput.focus();

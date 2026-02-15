@@ -443,7 +443,8 @@ export class AIClient {
             allDay: input.allDay as boolean, endDate: input.endDate as string,
             type: input.type as "single" | "recurring" | "rrule",
             daysOfWeek: input.daysOfWeek as string[], startRecur: input.startRecur as string,
-            endRecur: input.endRecur as string, body: input.body as string,
+            endRecur: input.endRecur as string, rrule: input.rrule as string,
+            body: input.body as string,
           });
         case "update_event":
           if (!calendarManager) return "Calendar manager not available.";
