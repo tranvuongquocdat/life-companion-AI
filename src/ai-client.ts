@@ -1,0 +1,435 @@
+import { requestUrl } from "obsidian";
+import type { AIModel, AIProvider, Attachment, ChatMode, SimpleMessage } from "./types";
+import type { VaultTools } from "./vault-tools";
+import type { ToolDefinition } from "./tool-definitions";
+
+interface SendMessageOptions {
+  userMessage: string;
+  mode: ChatMode;
+  model: AIModel;
+  provider: AIProvider;
+  systemPrompt: string;
+  conversationHistory: SimpleMessage[];
+  vaultTools: VaultTools;
+  tools?: ToolDefinition[];
+  attachments?: Attachment[];
+  onText: (text: string) => void;
+  onToolUse: (toolName: string, input: Record<string, unknown>) => void;
+  onToolResult: (toolName: string, result: string) => void;
+}
+
+interface AuthConfig {
+  claudeAccessToken?: string;
+  claudeApiKey?: string;
+  openaiApiKey?: string;
+  geminiApiKey?: string;
+  groqApiKey?: string;
+}
+
+export class AIClient {
+  private auth: AuthConfig;
+
+  constructor(auth: AuthConfig) {
+    this.auth = auth;
+  }
+
+  updateAuth(auth: AuthConfig) {
+    this.auth = auth;
+  }
+
+  /** Simulate streaming by emitting text word-by-word with small delays */
+  private async simulateStream(text: string, onText: (chunk: string) => void): Promise<void> {
+    const words = text.split(/(\s+)/); // split keeping whitespace
+    const batchSize = 3;
+    for (let i = 0; i < words.length; i += batchSize) {
+      const chunk = words.slice(i, i + batchSize).join("");
+      onText(chunk);
+      await new Promise((r) => setTimeout(r, 18));
+    }
+  }
+
+  async sendMessage(options: SendMessageOptions): Promise<string> {
+    const provider = options.provider;
+    switch (provider) {
+      case "claude":
+        return this.sendClaude(options);
+      case "openai":
+        return this.sendOpenAICompatible(
+          options,
+          "https://api.openai.com/v1/chat/completions",
+          this.auth.openaiApiKey || ""
+        );
+      case "groq":
+        return this.sendOpenAICompatible(
+          options,
+          "https://api.groq.com/openai/v1/chat/completions",
+          this.auth.groqApiKey || ""
+        );
+      case "gemini":
+        return this.sendGemini(options);
+    }
+  }
+
+  // ─── Claude (Anthropic) ───────────────────────────────────────────
+
+  private getClaudeHeaders(): Record<string, string> {
+    if (this.auth.claudeAccessToken) {
+      return {
+        "Authorization": `Bearer ${this.auth.claudeAccessToken}`,
+        "anthropic-beta": "oauth-2025-04-20",
+        "anthropic-version": "2023-06-01",
+        "content-type": "application/json",
+      };
+    }
+    return {
+      "x-api-key": this.auth.claudeApiKey || "",
+      "anthropic-version": "2023-06-01",
+      "content-type": "application/json",
+    };
+  }
+
+  private async sendClaude(options: SendMessageOptions): Promise<string> {
+    const { model, systemPrompt, conversationHistory, vaultTools, onText, onToolUse, onToolResult } = options;
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const messages: any[] = conversationHistory.map((m) => ({
+      role: m.role,
+      content: m.content,
+    }));
+    const userContent = this.formatClaudeUserContent(options.userMessage, options.attachments || []);
+    messages.push({ role: "user", content: userContent });
+
+    const toolDefs = (options.tools || []).map((t) => ({
+      name: t.name,
+      description: t.description,
+      input_schema: t.input_schema,
+    }));
+
+    let fullResponse = "";
+
+    while (true) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const body: Record<string, any> = { model, max_tokens: 4096, system: systemPrompt, messages };
+      if (toolDefs.length > 0) body.tools = toolDefs;
+
+      const response = await requestUrl({
+        url: "https://api.anthropic.com/v1/messages",
+        method: "POST",
+        headers: this.getClaudeHeaders(),
+        body: JSON.stringify(body),
+        throw: false,
+      });
+
+      if (response.status !== 200) {
+        throw new Error(`${response.status} ${response.text}`);
+      }
+
+      const data = response.json;
+      const textParts: string[] = [];
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const toolUseBlocks: any[] = [];
+
+      for (const block of data.content) {
+        if (block.type === "text") {
+          textParts.push(block.text);
+          await this.simulateStream(block.text, onText);
+        } else if (block.type === "tool_use") {
+          toolUseBlocks.push(block);
+          onToolUse(block.name, block.input);
+        }
+      }
+
+      fullResponse += textParts.join("");
+      messages.push({ role: "assistant", content: data.content });
+
+      if (data.stop_reason === "end_turn" || toolUseBlocks.length === 0) break;
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const toolResults: any[] = [];
+      for (const toolUse of toolUseBlocks) {
+        const result = await this.executeTool(toolUse.name, toolUse.input, vaultTools);
+        onToolResult(toolUse.name, result);
+        toolResults.push({ type: "tool_result", tool_use_id: toolUse.id, content: result });
+      }
+      messages.push({ role: "user", content: toolResults });
+    }
+
+    return fullResponse;
+  }
+
+  // ─── OpenAI-compatible (OpenAI + Groq) ─────────────────────────────
+
+  private async sendOpenAICompatible(
+    options: SendMessageOptions,
+    apiUrl: string,
+    apiKey: string
+  ): Promise<string> {
+    const { model, systemPrompt, conversationHistory, vaultTools, onText, onToolUse, onToolResult } = options;
+
+    const userContent = this.formatOpenAIUserContent(options.userMessage, options.attachments || []);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const messages: any[] = [
+      { role: "system", content: systemPrompt },
+      ...conversationHistory.map((m) => ({ role: m.role, content: m.content })),
+      { role: "user", content: userContent },
+    ];
+
+    const toolDefs = (options.tools || []).map((t) => ({
+      type: "function" as const,
+      function: {
+        name: t.name,
+        description: t.description,
+        parameters: t.input_schema,
+      },
+    }));
+
+    let fullResponse = "";
+
+    while (true) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const body: Record<string, any> = { model, messages };
+      // OpenAI newer models all use max_completion_tokens; Groq uses max_tokens
+      if (apiUrl.includes("openai.com")) {
+        body.max_completion_tokens = 4096;
+      } else {
+        body.max_tokens = 4096;
+      }
+      if (toolDefs.length > 0) body.tools = toolDefs;
+
+      const response = await requestUrl({
+        url: apiUrl,
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(body),
+        throw: false,
+      });
+
+      if (response.status !== 200) {
+        throw new Error(`${response.status} ${response.text}`);
+      }
+
+      const data = response.json;
+      const choice = data.choices[0];
+      const msg = choice.message;
+
+      if (msg.content) {
+        fullResponse += msg.content;
+        await this.simulateStream(msg.content, onText);
+      }
+
+      messages.push(msg);
+
+      if (choice.finish_reason !== "tool_calls" || !msg.tool_calls?.length) break;
+
+      for (const toolCall of msg.tool_calls) {
+        const fn = toolCall.function;
+        const args = JSON.parse(fn.arguments);
+        onToolUse(fn.name, args);
+        const result = await this.executeTool(fn.name, args, vaultTools);
+        onToolResult(fn.name, result);
+        messages.push({ role: "tool", tool_call_id: toolCall.id, content: result });
+      }
+    }
+
+    return fullResponse;
+  }
+
+  // ─── Gemini (Google) ──────────────────────────────────────────────
+
+  private async sendGemini(options: SendMessageOptions): Promise<string> {
+    const { model, systemPrompt, conversationHistory, vaultTools, onText, onToolUse, onToolResult } = options;
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const contents: any[] = conversationHistory.map((m) => ({
+      role: m.role === "assistant" ? "model" : "user",
+      parts: [{ text: m.content }],
+    }));
+    const userParts = this.formatGeminiUserParts(options.userMessage, options.attachments || []);
+    contents.push({ role: "user", parts: userParts });
+
+    const toolDefs = options.tools || [];
+
+    let fullResponse = "";
+    const apiKey = this.auth.geminiApiKey || "";
+
+    while (true) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const body: Record<string, any> = {
+        contents,
+        systemInstruction: { parts: [{ text: systemPrompt }] },
+      };
+      if (toolDefs.length > 0) {
+        body.tools = [{
+          functionDeclarations: toolDefs.map((t) => ({
+            name: t.name,
+            description: t.description,
+            parameters: t.input_schema,
+          })),
+        }];
+      }
+
+      const response = await requestUrl({
+        url: `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+        throw: false,
+      });
+
+      if (response.status !== 200) {
+        throw new Error(`${response.status} ${response.text}`);
+      }
+
+      const data = response.json;
+      const candidate = data.candidates?.[0];
+      if (!candidate) throw new Error("No response from Gemini");
+
+      const parts = candidate.content?.parts || [];
+      const textParts: string[] = [];
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const functionCalls: any[] = [];
+
+      for (const part of parts) {
+        if (part.text) {
+          textParts.push(part.text);
+          await this.simulateStream(part.text, onText);
+        } else if (part.functionCall) {
+          functionCalls.push(part.functionCall);
+          onToolUse(part.functionCall.name, part.functionCall.args || {});
+        }
+      }
+
+      fullResponse += textParts.join("");
+      contents.push({ role: "model", parts: candidate.content.parts });
+
+      if (functionCalls.length === 0) break;
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const functionResponses: any[] = [];
+      for (const fc of functionCalls) {
+        const result = await this.executeTool(fc.name, fc.args || {}, vaultTools);
+        onToolResult(fc.name, result);
+        functionResponses.push({
+          functionResponse: { name: fc.name, response: { result } },
+        });
+      }
+      contents.push({ role: "user", parts: functionResponses });
+    }
+
+    return fullResponse;
+  }
+
+  // ─── Attachment formatters ───────────────────────────────────────────
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private formatClaudeUserContent(text: string, attachments: Attachment[]): any {
+    if (attachments.length === 0) return text;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const blocks: any[] = [];
+    for (const att of attachments) {
+      if (att.type === "text") {
+        blocks.push({ type: "text", text: `[File: ${att.name}]\n${att.data}` });
+      } else if (att.type === "image") {
+        blocks.push({ type: "image", source: { type: "base64", media_type: att.mimeType, data: att.data } });
+      } else if (att.type === "pdf") {
+        blocks.push({ type: "document", source: { type: "base64", media_type: "application/pdf", data: att.data } });
+      }
+    }
+    blocks.push({ type: "text", text });
+    return blocks;
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private formatOpenAIUserContent(text: string, attachments: Attachment[]): any {
+    if (attachments.length === 0) return text;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const parts: any[] = [];
+    for (const att of attachments) {
+      if (att.type === "text") {
+        parts.push({ type: "text", text: `[File: ${att.name}]\n${att.data}` });
+      } else if (att.type === "image") {
+        parts.push({ type: "image_url", image_url: { url: `data:${att.mimeType};base64,${att.data}`, detail: "auto" } });
+      } else if (att.type === "pdf") {
+        parts.push({ type: "text", text: `[Attached PDF: ${att.name} — PDF not directly supported by this model]` });
+      }
+    }
+    parts.push({ type: "text", text });
+    return parts;
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private formatGeminiUserParts(text: string, attachments: Attachment[]): any[] {
+    if (attachments.length === 0) return [{ text }];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const parts: any[] = [];
+    for (const att of attachments) {
+      if (att.type === "text") {
+        parts.push({ text: `[File: ${att.name}]\n${att.data}` });
+      } else {
+        parts.push({ inlineData: { mimeType: att.mimeType, data: att.data } });
+      }
+    }
+    parts.push({ text });
+    return parts;
+  }
+
+  // ─── Tool execution ───────────────────────────────────────────────
+
+  private async executeTool(
+    name: string,
+    input: Record<string, unknown>,
+    vaultTools: VaultTools
+  ): Promise<string> {
+    try {
+      switch (name) {
+        case "search_vault":
+          return await vaultTools.searchVault(input.query as string);
+        case "read_note":
+          return await vaultTools.readNote(input.path as string);
+        case "write_note":
+          return await vaultTools.writeNote(input.path as string, input.content as string);
+        case "move_note":
+          return await vaultTools.moveNote(input.from as string, input.to as string);
+        case "list_folder":
+          return await vaultTools.listFolder(input.path as string);
+        case "get_recent_notes":
+          return await vaultTools.getRecentNotes(input.days as number);
+        case "web_search":
+          return await vaultTools.webSearch(input.query as string);
+        case "web_fetch":
+          return await vaultTools.webFetch(input.url as string);
+        case "append_note":
+          return await vaultTools.appendNote(input.path as string, input.content as string);
+        case "read_properties":
+          return await vaultTools.readProperties(input.path as string);
+        case "update_properties":
+          return await vaultTools.updateProperties(input.path as string, input.properties as Record<string, unknown>);
+        case "get_tags":
+          return await vaultTools.getTags();
+        case "search_by_tag":
+          return await vaultTools.searchByTag(input.tag as string);
+        case "get_vault_stats":
+          return await vaultTools.getVaultStats();
+        case "get_backlinks":
+          return await vaultTools.getBacklinks(input.path as string);
+        case "get_outgoing_links":
+          return await vaultTools.getOutgoingLinks(input.path as string);
+        case "get_tasks":
+          return await vaultTools.getTasks(input.path as string, (input.includeCompleted as boolean) ?? true);
+        case "toggle_task":
+          return await vaultTools.toggleTask(input.path as string, input.line as number);
+        case "get_daily_note":
+          return await vaultTools.getDailyNote(input.date as string);
+        case "create_daily_note":
+          return await vaultTools.createDailyNote(input.date as string, input.content as string);
+        default:
+          return `Unknown tool: ${name}`;
+      }
+    } catch (error) {
+      return `Error executing ${name}: ${(error as Error).message}`;
+    }
+  }
+}
