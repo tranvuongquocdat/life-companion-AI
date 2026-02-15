@@ -72,12 +72,12 @@ Click the Life Companion icon in the sidebar (or use the command palette). That'
 On first run, the plugin creates a few helper folders:
 
 ```
-_life/
+system/
 ├── profile.md     ← The AI learns about you over time and saves context here
 ├── index.md       ← A guide to your vault structure
-└── retro/         ← Space for reflections and retrospectives
-_inbox/            ← Quick capture inbox
-_chats/            ← Your conversation history (auto-saved daily)
+├── retro/         ← Space for reflections and retrospectives
+└── chats/         ← Your conversation history (auto-saved daily)
+inbox/             ← Quick capture inbox
 ```
 
 The AI uses your profile and vault index to give personalized responses. Over time, it builds up context about your preferences, projects, and how you organize things.
