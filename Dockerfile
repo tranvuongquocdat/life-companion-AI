@@ -6,8 +6,11 @@ COPY package*.json ./
 COPY packages/core/package*.json packages/core/
 COPY packages/server/package*.json packages/server/
 
-# Install everything (root + workspaces, including devDeps for build)
+# Install root + core (gets esbuild + shared types)
 RUN npm install
+
+# Install server dependencies separately (not in workspace to keep local dev lean)
+RUN cd packages/server && npm install
 
 # Copy source code
 COPY packages/core packages/core
