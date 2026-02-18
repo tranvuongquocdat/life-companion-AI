@@ -6,14 +6,14 @@ COPY package*.json ./
 COPY packages/core/package*.json packages/core/
 COPY packages/server/package*.json packages/server/
 
-# Install only core + server workspace dependencies
-RUN npm ci --workspace=packages/core --workspace=packages/server
+# Install all dependencies (including devDeps for build)
+RUN npm install --workspace=packages/core --workspace=packages/server
 
 # Copy source code
 COPY packages/core packages/core
 COPY packages/server packages/server
 
-# Build server (bundles core via esbuild)
+# Build server (bundles core via esbuild, then devDeps no longer needed)
 RUN cd packages/server && node esbuild.config.mjs
 
 EXPOSE 3456
