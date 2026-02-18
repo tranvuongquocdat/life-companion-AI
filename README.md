@@ -38,14 +38,14 @@ Full English and Vietnamese support — including all tool activity descriptions
 
 1. Install the [BRAT](https://github.com/TfTHacker/obsidian42-brat) plugin from Community Plugins
 2. In BRAT settings, click "Add Beta Plugin"
-3. Paste: `tranvuongquocdat/life-companition-AI`
+3. Paste: `tranvuongquocdat/life-companion-AI`
 4. Enable "Life Companion AI" in Community Plugins
 
 BRAT will auto-update the plugin when new releases are published.
 
 ### Install Manually
 
-1. Download `main.js`, `manifest.json`, and `styles.css` from the [latest release](https://github.com/tranvuongquocdat/life-companition-AI/releases/latest)
+1. Download `main.js`, `manifest.json`, and `styles.css` from the [latest release](https://github.com/tranvuongquocdat/life-companion-AI/releases/latest)
 2. Create folder: `your-vault/.obsidian/plugins/life-companion/`
 3. Copy the 3 files into that folder
 4. In Obsidian: Settings → Community Plugins → Enable "Life Companion AI"
@@ -53,8 +53,8 @@ BRAT will auto-update the plugin when new releases are published.
 ### Build from Source (Developers)
 
 ```bash
-git clone https://github.com/tranvuongquocdat/life-companition-AI.git
-cd life-companition-AI
+git clone https://github.com/tranvuongquocdat/life-companion-AI.git
+cd life-companion-AI
 npm install && npm run build
 ln -s "$(pwd)" /path/to/your-vault/.obsidian/plugins/life-companion
 ```
@@ -121,7 +121,7 @@ Want to chat with your vault from your phone? Run the server on a home PC (or an
 **Step 1 — Server** (run on your home PC / any Linux machine):
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/tranvuongquocdat/life-companition-AI/main/scripts/setup.sh | bash
+curl -fsSL https://raw.githubusercontent.com/tranvuongquocdat/life-companion-AI/main/scripts/setup.sh | bash
 ```
 
 The script installs Docker + Syncthing, asks for your Telegram bot token & chat ID, builds and starts the server. At the end it prints a **Device ID**.
@@ -144,8 +144,8 @@ That's it — chat with your bot on Telegram.
 If you prefer manual control over the automated script:
 
 ```bash
-git clone https://github.com/tranvuongquocdat/life-companition-AI.git
-cd life-companition-AI
+git clone https://github.com/tranvuongquocdat/life-companion-AI.git
+cd life-companion-AI
 cp .env.example .env   # Edit with your tokens and keys
 docker compose up -d
 ```

@@ -6,7 +6,7 @@
 #   Docker, Syncthing, repo clone, .env configuration, docker compose, vault sync
 #
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/tranvuongquocdat/life-companition-AI/main/scripts/setup.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/tranvuongquocdat/life-companion-AI/main/scripts/setup.sh | bash
 #   OR: chmod +x setup.sh && ./setup.sh
 #
 # Tested: Ubuntu 20.04, 22.04, 24.04
@@ -114,17 +114,17 @@ fi
 
 header "3/7 Repository"
 
-REPO_URL="https://github.com/tranvuongquocdat/life-companition-AI.git"
+REPO_URL="https://github.com/tranvuongquocdat/life-companion-AI.git"
 
-if git -C "$(pwd)" remote get-url origin 2>/dev/null | grep -q "life-companition-AI"; then
+if git -C "$(pwd)" remote get-url origin 2>/dev/null | grep -q "life-companion-AI"; then
     info "Already in repo at $(pwd)"
-elif [[ -d "life-companition-AI" ]]; then
-    cd life-companition-AI
+elif [[ -d "life-companion-AI" ]]; then
+    cd life-companion-AI
     git pull --ff-only 2>/dev/null || true
     info "Using existing clone at $(pwd)"
 else
     git clone "$REPO_URL"
-    cd life-companition-AI
+    cd life-companion-AI
     info "Cloned to $(pwd)"
 fi
 

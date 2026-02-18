@@ -9,8 +9,8 @@
 
 1. Clone and install:
    ```bash
-   git clone https://github.com/tranvuongquocdat/life-companition-AI.git
-   cd life-companition-AI
+   git clone https://github.com/tranvuongquocdat/life-companion-AI.git
+   cd life-companion-AI
    npm install
    ```
 
