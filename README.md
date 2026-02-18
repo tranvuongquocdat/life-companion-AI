@@ -143,7 +143,7 @@ CLAUDE_API_KEY=<your key>
 
 Run:
 ```bash
-docker-compose up -d
+docker compose up -d
 ```
 
 The vault is mounted at `./data/vault` — point [Syncthing](https://syncthing.net/) or copy your Obsidian vault there to give the bot access to your notes.

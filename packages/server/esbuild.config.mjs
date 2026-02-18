@@ -7,7 +7,8 @@ esbuild.build({
   platform: "node",
   target: "node20",
   format: "esm",
-  // Bundle everything into single file for Docker portability
+  // Keep runtime deps external (installed in node_modules, avoids CJS/ESM issues)
+  external: ["express", "node-telegram-bot-api", "node-cron", "gray-matter"],
   sourcemap: true,
   banner: {
     js: 'import { createRequire } from "module"; const require = createRequire(import.meta.url);',
