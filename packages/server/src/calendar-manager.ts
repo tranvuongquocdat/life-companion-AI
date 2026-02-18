@@ -32,8 +32,21 @@ const RRULE_DOW_MAP: Record<string, number> = {
 export class ServerCalendarManager {
   private eventsDir: string;
 
-  constructor(private vaultPath: string, eventsDir = "events") {
-    this.eventsDir = eventsDir;
+  constructor(private vaultPath: string, eventsDir?: string) {
+    this.eventsDir = eventsDir || this.detectEventsDir() || "calendar";
+  }
+
+  /** Read events directory from Full Calendar plugin config (same source as Obsidian plugin). */
+  private detectEventsDir(): string | null {
+    try {
+      const configPath = join(this.vaultPath, ".obsidian/plugins/obsidian-full-calendar/data.json");
+      const content = require("fs").readFileSync(configPath, "utf-8");
+      const data = JSON.parse(content);
+      const localSource = data.calendarSources?.find((s: any) => s.type === "local");
+      return localSource?.directory || null;
+    } catch {
+      return null;
+    }
   }
 
   private resolve(p: string): string {
