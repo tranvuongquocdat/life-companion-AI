@@ -138,7 +138,7 @@ SKIP_ENV=false
 if [[ -f .env ]]; then
     warn ".env already exists"
     ask "Reconfigure? [y/N]: "
-    read -r RECONF
+    read -r RECONF < /dev/tty
     if [[ ! "$RECONF" =~ ^[Yy]$ ]]; then
         info "Keeping existing .env"
         SKIP_ENV=true
@@ -153,18 +153,18 @@ if [[ "$SKIP_ENV" == "false" ]]; then
     BOT_TOKEN=""
     while [[ -z "$BOT_TOKEN" ]]; do
         ask "Telegram Bot Token: "
-        read -r BOT_TOKEN
+        read -r BOT_TOKEN < /dev/tty
     done
 
     CHAT_ID=""
     while [[ -z "$CHAT_ID" ]]; do
         ask "Telegram Chat ID: "
-        read -r CHAT_ID
+        read -r CHAT_ID < /dev/tty
     done
 
     # Model
     ask "Default model [claude-opus-4-6]: "
-    read -r MODEL
+    read -r MODEL < /dev/tty
     MODEL="${MODEL:-claude-opus-4-6}"
 
     # Claude auth
@@ -175,7 +175,7 @@ if [[ "$SKIP_ENV" == "false" ]]; then
     if [[ -f "$CRED_FILE" ]]; then
         info "Found Claude Code credentials at $CRED_FILE"
         ask "Use OAuth auto-refresh from Claude Code? [Y/n]: "
-        read -r USE_CRED
+        read -r USE_CRED < /dev/tty
         if [[ ! "$USE_CRED" =~ ^[Nn]$ ]]; then
             USE_OAUTH=true
             info "Will use OAuth auto-refresh"
@@ -184,14 +184,14 @@ if [[ "$SKIP_ENV" == "false" ]]; then
 
     if [[ "$USE_OAUTH" == "false" ]]; then
         ask "Claude API Key (or Enter to skip): "
-        read -r CLAUDE_KEY
+        read -r CLAUDE_KEY < /dev/tty
     fi
 
     # Optional keys
     ask "OpenAI API Key (optional, Enter to skip): "
-    read -r OPENAI_KEY
+    read -r OPENAI_KEY < /dev/tty
     ask "Gemini API Key (optional, Enter to skip): "
-    read -r GEMINI_KEY
+    read -r GEMINI_KEY < /dev/tty
 
     # Write .env
     cat > .env <<ENVEOF

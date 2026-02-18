@@ -27,8 +27,16 @@ export class TelegramBotHandler {
     private toolExecutor: (name: string, input: Record<string, unknown>) => Promise<string>,
   ) {
     this.bot = new TelegramBot(config.telegramBotToken, { polling: true });
+    let pollingErrorCount = 0;
     this.bot.on("polling_error", (error) => {
-      console.error("Telegram polling error:", (error as Error).message);
+      pollingErrorCount++;
+      if (pollingErrorCount <= 3) {
+        console.error(`Telegram polling error (${pollingErrorCount}/3):`, (error as Error).message);
+      }
+      if (pollingErrorCount === 3) {
+        console.error("Suppressing further polling errors. Check your TELEGRAM_BOT_TOKEN.");
+        this.bot.stopPolling();
+      }
     });
     this.conversation = this.newConversation();
     this.setupHandlers();
