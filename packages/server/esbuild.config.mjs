@@ -7,7 +7,7 @@ esbuild.build({
   platform: "node",
   target: "node20",
   format: "esm",
-  external: ["express", "node-telegram-bot-api", "node-cron", "gray-matter"],
+  // Bundle everything into single file for Docker portability
   sourcemap: true,
   banner: {
     js: 'import { createRequire } from "module"; const require = createRequire(import.meta.url);',
