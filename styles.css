@@ -725,6 +725,28 @@ body.lc-resizing {
   border-bottom: 1px solid var(--background-modifier-border);
 }
 
+/* Section cards (Calendar, Web Search, Snapshots, Vault Sync) */
+.lc-section-card {
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 8px;
+  padding: 4px 14px;
+  margin-bottom: 10px;
+}
+
+.lc-section-card .setting-item {
+  padding: 10px 0;
+}
+
+.lc-section-card .setting-item:last-child {
+  border-bottom: none;
+}
+
+.lc-section-desc {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin: 4px 0 2px;
+}
+
 /* All setting items: no border separators, generous spacing */
 .lc-settings .setting-item {
   border-top: none;

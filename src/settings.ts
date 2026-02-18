@@ -96,8 +96,9 @@ export class LifeCompanionSettingTab extends PluginSettingTab {
 
     // ─── Calendar Settings ──────────────────────────────────
     containerEl.createEl("h3", { text: "Calendar" });
+    const calCard = containerEl.createDiv({ cls: "lc-section-card" });
 
-    new Setting(containerEl)
+    new Setting(calCard)
       .setName("Events Directory")
       .setDesc("Fallback events directory if Full Calendar auto-detect fails. Leave empty to auto-detect.")
       .addText((text) =>
@@ -110,7 +111,7 @@ export class LifeCompanionSettingTab extends PluginSettingTab {
           })
       );
 
-    new Setting(containerEl)
+    new Setting(calCard)
       .setName("Week starts on")
       .setDesc("First day of the week in the calendar view.")
       .addDropdown((drop) =>
@@ -125,10 +126,11 @@ export class LifeCompanionSettingTab extends PluginSettingTab {
 
     // ─── Web Search ────────────────────────────────────────────
     containerEl.createEl("h3", { text: "Web Search" });
+    const webCard = containerEl.createDiv({ cls: "lc-section-card" });
 
     const braveKey = this.plugin.settings.braveSearchApiKey;
     if (braveKey) {
-      new Setting(containerEl)
+      new Setting(webCard)
         .setName("Brave Search API")
         .setDesc("Connected — 2,000 free queries/month. Falls back to DuckDuckGo when quota exceeded.")
         .addButton((btn) =>
@@ -140,7 +142,7 @@ export class LifeCompanionSettingTab extends PluginSettingTab {
         );
     } else {
       let keyValue = "";
-      new Setting(containerEl)
+      new Setting(webCard)
         .setName("Brave Search API Key")
         .setDesc("Optional — get free key at brave.com/search/api (2,000 queries/month). Without it, DuckDuckGo is used.")
         .addText((text) =>
@@ -159,8 +161,9 @@ export class LifeCompanionSettingTab extends PluginSettingTab {
 
     // ─── Snapshots ─────────────────────────────────────────────
     containerEl.createEl("h3", { text: "Snapshots" });
+    const snapCard = containerEl.createDiv({ cls: "lc-section-card" });
 
-    new Setting(containerEl)
+    new Setting(snapCard)
       .setName("Enable note snapshots")
       .setDesc("Automatically save previous versions when a note is overwritten. Uses extra vault storage.")
       .addToggle((toggle) =>
@@ -174,7 +177,7 @@ export class LifeCompanionSettingTab extends PluginSettingTab {
       );
 
     if (this.plugin.settings.snapshotsEnabled) {
-      new Setting(containerEl)
+      new Setting(snapCard)
         .setName("Max snapshots per note")
         .setDesc("Maximum number of previous versions to keep per note (older ones are deleted automatically)")
         .addSlider((slider) =>
@@ -191,12 +194,13 @@ export class LifeCompanionSettingTab extends PluginSettingTab {
 
     // ─── Vault Sync ──────────────────────────────────────────────
     containerEl.createEl("h3", { text: "Vault Sync" });
-    containerEl.createEl("p", {
+    const syncCard = containerEl.createDiv({ cls: "lc-section-card" });
+    syncCard.createEl("p", {
       text: "Sync your vault with a server for Telegram bot, scheduled briefings, and mobile access.",
-      cls: "setting-item-description",
+      cls: "lc-section-desc",
     });
 
-    this.renderSyncSection(containerEl);
+    this.renderSyncSection(syncCard);
   }
 
   // ─── Vault Sync Section ────────────────────────────────────────
