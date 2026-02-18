@@ -604,13 +604,34 @@ export class LifeCompanionSettingTab extends PluginSettingTab {
   }
 
   private renderToolSection(containerEl: HTMLElement, label: string, tools: typeof ALL_TOOLS) {
-    const header = containerEl.createDiv({ cls: "lc-tool-group-header" });
-    header.createEl("span", { cls: "lc-tool-group-label", text: label });
+    const collapseKey = `tools-${label}`;
+    const isCollapsed = this.collapsed[collapseKey] ?? true;
+    const enabledCount = tools.filter((t) => this.plugin.settings.enabledTools.includes(t.name)).length;
+
+    const card = containerEl.createDiv({ cls: "lc-provider-card" });
+
+    // Header
+    const header = card.createDiv({ cls: "lc-provider-header" });
+    const arrow = header.createSpan({ cls: "lc-provider-arrow" });
+    arrow.textContent = isCollapsed ? "\u25B8" : "\u25BE";
+    header.createSpan({ cls: "lc-provider-name", text: label });
+    header.createSpan({ cls: "lc-group-badge", text: `${enabledCount}/${tools.length}` });
+
+    // Body
+    const body = card.createDiv({ cls: "lc-provider-body" });
+    if (isCollapsed) body.addClass("lc-collapsed");
+
+    header.addEventListener("click", () => {
+      this.collapsed[collapseKey] = !this.collapsed[collapseKey];
+      const nowCollapsed = this.collapsed[collapseKey];
+      body.toggleClass("lc-collapsed", nowCollapsed);
+      arrow.textContent = nowCollapsed ? "\u25B8" : "\u25BE";
+    });
 
     const detailedDescs = this.getToolDetailedDescriptions();
 
     for (const tool of tools) {
-      const s = new Setting(containerEl)
+      const s = new Setting(body)
         .setName(tool.displayName)
         .setDesc(tool.description)
         .addToggle((toggle) => {
@@ -634,7 +655,6 @@ export class LifeCompanionSettingTab extends PluginSettingTab {
         const infoBtn = createEl("span", { cls: "lc-tool-info-btn", text: "!" });
         nameEl.appendChild(infoBtn);
 
-        // Detail panel goes after the whole setting row
         const detailEl = createEl("div", {
           cls: "lc-tool-detail",
           text: detailedDescs[tool.name] || tool.description,
