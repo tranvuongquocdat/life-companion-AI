@@ -223,15 +223,22 @@ export class LifeCompanionSettingTab extends PluginSettingTab {
         .setDesc("Not detected — install Syncthing to enable vault sync.")
         .addButton((btn) =>
           btn.setButtonText("How to install").onClick(() => {
-            const modal = statusEl.createDiv({ cls: "lc-install-info" });
-            modal.createEl("p", { text: "Run this in your terminal:" });
-            const code = modal.createEl("code");
-            code.textContent = installCmd;
-            code.style.display = "block";
-            code.style.padding = "8px";
-            code.style.marginTop = "4px";
-            code.style.userSelect = "all";
-            modal.createEl("p", { text: "Then restart Obsidian and come back here." });
+            const infoEl = statusEl.createDiv({ cls: "lc-install-guide" });
+            infoEl.style.padding = "12px";
+            infoEl.style.marginTop = "8px";
+            infoEl.style.border = "1px solid var(--background-modifier-border)";
+            infoEl.style.borderRadius = "8px";
+            infoEl.style.backgroundColor = "var(--background-secondary)";
+            infoEl.createEl("p", { text: "Run this in your terminal:" });
+            const codeBlock = infoEl.createEl("pre");
+            codeBlock.style.padding = "8px";
+            codeBlock.style.borderRadius = "4px";
+            codeBlock.style.backgroundColor = "var(--background-primary)";
+            codeBlock.style.userSelect = "all";
+            codeBlock.style.whiteSpace = "pre-wrap";
+            codeBlock.style.wordBreak = "break-all";
+            codeBlock.textContent = installCmd;
+            infoEl.createEl("p", { text: "Then click Re-check below." });
             btn.setDisabled(true);
           })
         );
