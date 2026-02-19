@@ -1126,41 +1126,41 @@ export class ChatView extends ItemView {
     const t = this.t;
     switch (name) {
       case "search_vault":
-        return t.toolSearching(String(input.query || ""));
+        return t.toolSearching(String(input.query ?? ""));
       case "read_note":
-        return t.toolReading(String(input.path || ""));
+        return t.toolReading(String(input.path ?? ""));
       case "write_note":
-        return t.toolWriting(String(input.path || ""));
+        return t.toolWriting(String(input.path ?? ""));
       case "move_note":
-        return t.toolMoving(String(input.from || ""), String(input.to || ""));
+        return t.toolMoving(String(input.from ?? ""), String(input.to ?? ""));
       case "list_folder":
-        return t.toolListing(String(input.path || "/"));
+        return t.toolListing(String(input.path ?? "/"));
       case "get_recent_notes":
-        return t.toolRecentNotes(Number(input.days || 0));
+        return t.toolRecentNotes(Number(input.days ?? 0));
       case "web_search":
-        return t.toolWebSearch(String(input.query || ""));
+        return t.toolWebSearch(String(input.query ?? ""));
       case "web_fetch": {
-        const url = String(input.url || "");
+        const url = String(input.url ?? "");
         return t.toolFetching(url.length > 40 ? url.slice(0, 40) + "..." : url);
       }
       case "append_note":
-        return t.toolAppending(String(input.path || ""));
+        return t.toolAppending(String(input.path ?? ""));
       case "read_properties":
-        return t.toolReadingProps(String(input.path || ""));
+        return t.toolReadingProps(String(input.path ?? ""));
       case "update_properties":
-        return t.toolUpdatingProps(String(input.path || ""));
+        return t.toolUpdatingProps(String(input.path ?? ""));
       case "get_tags":
         return t.toolGettingTags;
       case "search_by_tag":
-        return t.toolSearchingTag(String(input.tag || ""));
+        return t.toolSearchingTag(String(input.tag ?? ""));
       case "get_vault_stats":
         return t.toolVaultStats;
       case "get_backlinks":
-        return t.toolBacklinks(String(input.path || ""));
+        return t.toolBacklinks(String(input.path ?? ""));
       case "get_outgoing_links":
-        return t.toolOutgoing(String(input.path || ""));
+        return t.toolOutgoing(String(input.path ?? ""));
       case "get_tasks":
-        return t.toolGettingTasks(String(input.path || "vault"));
+        return t.toolGettingTasks(String(input.path ?? "vault"));
       case "toggle_task":
         return t.toolTogglingTask;
       case "get_daily_note":
@@ -1174,25 +1174,25 @@ export class ChatView extends ItemView {
         return t.toolGettingEvents(detail);
       }
       case "create_event":
-        return t.toolCreatingEvent(String(input.title || ""), String(input.date || ""));
+        return t.toolCreatingEvent(String(input.title ?? ""), String(input.date ?? ""));
       case "update_event":
         return t.toolUpdatingEvent;
       case "delete_event":
         return t.toolDeletingEvent;
       case "get_upcoming_events":
-        return t.toolUpcoming(Number(input.days || 7));
+        return t.toolUpcoming(Number(input.days ?? 7));
       case "save_memory":
         return t.toolSavingMemory;
       case "recall_memory":
         return t.toolRecalling(input.query ? String(input.query) : undefined);
       case "gather_retro_data":
-        return t.toolGatheringRetro(String(input.startDate || ""), String(input.endDate || ""));
+        return t.toolGatheringRetro(String(input.startDate ?? ""), String(input.endDate ?? ""));
       case "save_retro":
-        return t.toolSavingRetro(String(input.period || ""));
+        return t.toolSavingRetro(String(input.period ?? ""));
       case "get_goals":
         return t.toolGettingGoals;
       case "update_goal":
-        return t.toolUpdatingGoal(String(input.title || ""));
+        return t.toolUpdatingGoal(String(input.title ?? ""));
       default:
         return t.toolUsing(name);
     }

@@ -772,7 +772,7 @@ export class ServerVaultTools {
       text_decorations: "false",
     });
 
-    const res = await fetch(`https://api.search.brave.com/res/v1/web/search?${params}`, {
+    const res = await fetch(`https://api.search.brave.com/res/v1/web/search?${params.toString()}`, {
       method: "GET",
       headers: {
         "Accept": "application/json",
