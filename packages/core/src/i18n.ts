@@ -108,7 +108,7 @@ export interface I18n {
   toolWriting: (path: string) => string;
   toolMoving: (from: string, to: string) => string;
   toolListing: (path: string) => string;
-  toolRecentNotes: (days: unknown) => string;
+  toolRecentNotes: (days: number | string) => string;
   toolWebSearch: (query: string) => string;
   toolFetching: (url: string) => string;
   toolAppending: (path: string) => string;
@@ -128,7 +128,7 @@ export interface I18n {
   toolCreatingEvent: (title: string, date: string) => string;
   toolUpdatingEvent: string;
   toolDeletingEvent: string;
-  toolUpcoming: (days: unknown) => string;
+  toolUpcoming: (days: number | string) => string;
   toolSavingMemory: string;
   toolRecalling: (query?: string) => string;
   toolGatheringRetro: (start: string, end: string) => string;
@@ -145,11 +145,11 @@ const en: I18n = {
   deepThinking: "Deep thinking",
   usedTools: (n) => `Used ${n} tool${n > 1 ? "s" : ""}`,
   quickMode: "Quick",
-  deepDive: "Deep Dive",
-  switchedToDive: "Switched to Deep Dive. I'll brainstorm, research and challenge ideas with you before writing notes.",
+  deepDive: "Deep dive",
+  switchedToDive: "Switched to deep dive. I'll brainstorm, research and challenge ideas with you before writing notes.",
   switchedToQuick: "Switched to Quick Capture mode.",
-  newChat: "New Chat",
-  chatHistory: "Chat History",
+  newChat: "New chat",
+  chatHistory: "Chat history",
   noHistory: "No saved conversations yet",
   sendPlaceholder: "Type a message...",
   justNow: "Just now",
@@ -161,14 +161,14 @@ const en: I18n = {
   tokenExpired: "Token expired. Please log in again in Settings.",
   error: (msg) => `Error: ${msg}`,
 
-  settingsTitle: "Life Companion AI Settings",
-  apiProviders: "API Providers",
-  defaultModels: "Default Models",
-  enabledModels: "Enabled Models",
+  settingsTitle: "Life Companion AI settings",
+  apiProviders: "API providers",
+  defaultModels: "Default models",
+  enabledModels: "Enabled models",
   enabledModelsDesc: "Models shown in chat. Only connected providers can be enabled.",
-  quickCapture: "Quick Capture",
+  quickCapture: "Quick capture",
   quickCaptureDesc: "Quick notes (prefer fast & cheap)",
-  deepDiveModel: "Deep Dive",
+  deepDiveModel: "Deep dive",
   deepDiveDesc: "Brainstorm & deep thinking (prefer capable)",
   language: "Language",
   languageDesc: "Interface language",
@@ -176,18 +176,18 @@ const en: I18n = {
   connected: "Connected",
   disconnect: "Disconnect",
   removeKey: "Remove key",
-  verifySave: "Verify & Save",
+  verifySave: "Verify & save",
   enterKeyFirst: "Enter a key first",
   keyVerified: (l) => `${l} key verified!`,
   invalidKey: "Invalid key — check and try again",
   noApiKeyBadge: "No API key",
   mustHaveOneModel: "Must have at least 1 model enabled!",
-  claudeCodeLogin: "Claude Code Login",
+  claudeCodeLogin: "Claude Code login",
   connectedClaudeCode: "Connected to Claude Code!",
   orEnterApiKey: "Or enter API key from console.anthropic.com",
-  availableTools: "Available Tools",
+  availableTools: "Available tools",
   availableToolsDesc: "Tools the AI can use during conversations. Disable tools you don't need.",
-  refreshModels: "Refresh Models",
+  refreshModels: "Refresh models",
   modelsUpdated: (n) => `Found ${n} models`,
   noModelsFound: "Could not fetch models — check your API key",
   maxAttachments: "Maximum 4 attachments per message",
@@ -199,8 +199,8 @@ const en: I18n = {
   calendarToday: "Today",
   calendarNoEvents: "No events",
   calendarEventsFor: (date) => `Events for ${date}`,
-  calendarAddEvent: "Add Event",
-  calendarEditEvent: "Edit Event",
+  calendarAddEvent: "Add event",
+  calendarEditEvent: "Edit event",
   calendarDeleteConfirm: "Delete this event?",
   calendarEventTitle: "Title",
   calendarAllDay: "All day",
@@ -306,10 +306,10 @@ const vi: I18n = {
   deepThinking: "Suy nghĩ sâu...",
   usedTools: (n) => `Đã dùng ${n} tool${n > 1 ? "s" : ""}`,
   quickMode: "Quick",
-  deepDive: "Deep Dive",
+  deepDive: "Deep dive",
   switchedToDive: "Đã chuyển sang Deep Dive. Mình sẽ brainstorm, research và challenge ý tưởng trước khi ghi note.",
   switchedToQuick: "Đã chuyển sang Quick Capture.",
-  newChat: "New Chat",
+  newChat: "New chat",
   chatHistory: "Lịch sử chat",
   noHistory: "Chưa có cuộc trò chuyện nào được lưu",
   sendPlaceholder: "Nhắn gì đó...",
@@ -322,14 +322,14 @@ const vi: I18n = {
   tokenExpired: "Token hết hạn. Vui lòng đăng nhập lại trong Settings.",
   error: (msg) => `Lỗi: ${msg}`,
 
-  settingsTitle: "Life Companion AI Settings",
-  apiProviders: "API Providers",
-  defaultModels: "Default Models",
-  enabledModels: "Enabled Models",
+  settingsTitle: "Life Companion AI settings",
+  apiProviders: "API providers",
+  defaultModels: "Default models",
+  enabledModels: "Enabled models",
   enabledModelsDesc: "Models hiển thị trong chat. Chỉ providers đã kết nối mới được bật.",
-  quickCapture: "Quick Capture",
+  quickCapture: "Quick capture",
   quickCaptureDesc: "Ghi chú nhanh (nên fast & cheap)",
-  deepDiveModel: "Deep Dive",
+  deepDiveModel: "Deep dive",
   deepDiveDesc: "Brainstorm & suy nghĩ sâu (nên capable)",
   language: "Ngôn ngữ",
   languageDesc: "Ngôn ngữ giao diện",
@@ -343,7 +343,7 @@ const vi: I18n = {
   invalidKey: "Key không hợp lệ — kiểm tra và thử lại",
   noApiKeyBadge: "Chưa có API key",
   mustHaveOneModel: "Phải có ít nhất 1 model được bật!",
-  claudeCodeLogin: "Claude Code Login",
+  claudeCodeLogin: "Claude Code login",
   connectedClaudeCode: "Đã kết nối Claude Code!",
   orEnterApiKey: "Hoặc nhập API key từ console.anthropic.com",
   availableTools: "Tools có sẵn",

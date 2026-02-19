@@ -61,19 +61,18 @@ export class CalendarManager {
   // ─── Detection ──────────────────────────────────────────
 
   isFullCalendarInstalled(): boolean {
-    return (this.app as any).plugins?.enabledPlugins?.has("obsidian-full-calendar") ?? false;
+    return (this.app as unknown as { plugins?: { enabledPlugins?: Set<string> } }).plugins?.enabledPlugins?.has("obsidian-full-calendar") ?? false;
   }
 
   async getEventsDirectory(): Promise<string | null> {
     try {
-      const configPath = ".obsidian/plugins/obsidian-full-calendar/data.json";
+      const configPath = `${this.app.vault.configDir}/plugins/obsidian-full-calendar/data.json`;
       const content = await this.app.vault.adapter.read(configPath);
       const data = JSON.parse(content);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const localSource = data.calendarSources?.find((s: any) => s.type === "local");
+      const localSource = data.calendarSources?.find((s: { type: string }) => s.type === "local");
       if (localSource?.directory) return localSource.directory;
-    } catch {
-      // Config not found or unreadable
+    } catch (e) {
+      console.debug("Calendar config not found:", e);
     }
     return null;
   }
@@ -105,25 +104,24 @@ export class CalendarManager {
 
   // ─── Parse Events ───────────────────────────────────────
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private parseEvent(file: TFile, fm: Record<string, any>): CalendarEvent {
+  private parseEvent(file: TFile, fm: Record<string, unknown>): CalendarEvent {
     return {
       filePath: file.path,
-      title: fm.title || file.basename,
-      type: fm.type || "single",
-      date: fm.date,
-      endDate: fm.endDate,
-      allDay: fm.allDay,
-      startTime: fm.startTime,
-      endTime: fm.endTime,
-      completed: fm.completed,
-      completedDates: fm.completedDates,
-      daysOfWeek: fm.daysOfWeek,
-      startRecur: fm.startRecur,
-      endRecur: fm.endRecur,
-      rrule: fm.rrule,
-      startDate: fm.startDate,
-      skipDates: fm.skipDates,
+      title: (fm.title as string) || file.basename,
+      type: (fm.type as CalendarEvent["type"]) || "single",
+      date: fm.date as string | undefined,
+      endDate: fm.endDate as string | undefined,
+      allDay: fm.allDay as boolean | undefined,
+      startTime: fm.startTime as string | undefined,
+      endTime: fm.endTime as string | undefined,
+      completed: fm.completed as boolean | undefined,
+      completedDates: fm.completedDates as string[] | undefined,
+      daysOfWeek: fm.daysOfWeek as (string | number)[] | undefined,
+      startRecur: fm.startRecur as string | undefined,
+      endRecur: fm.endRecur as string | undefined,
+      rrule: fm.rrule as string | undefined,
+      startDate: fm.startDate as string | undefined,
+      skipDates: fm.skipDates as string[] | undefined,
     };
   }
 
@@ -135,7 +133,7 @@ export class CalendarManager {
       const cache = this.app.metadataCache.getFileCache(file);
       const fm = cache?.frontmatter;
       if (fm && fm.title) {
-        events.push(this.parseEvent(file, fm));
+        events.push(this.parseEvent(file, fm as Record<string, unknown>));
       }
     }
     return events;
@@ -431,7 +429,7 @@ export class CalendarManager {
   async deleteEvent(path: string): Promise<string> {
     const file = this.app.vault.getAbstractFileByPath(path);
     if (!file || !(file instanceof TFile)) return `Event file not found: ${path}`;
-    await this.app.vault.trash(file, true);
+    await this.app.fileManager.trashFile(file);
     return `Deleted event: ${path}`;
   }
 

@@ -1,4 +1,4 @@
-import { App, TFile, TFolder, TAbstractFile, Vault, requestUrl } from "obsidian";
+import { App, TFile, TFolder, requestUrl } from "obsidian";
 
 interface MemoryVectorEntry {
   id: string;       // "YYYY-MM-DD HH:MM" matching markdown heading
@@ -69,12 +69,12 @@ export class VaultTools {
 
       while (files.length > this.maxSnapshotsPerFile) {
         const oldest = files.shift()!;
-        await this.app.vault.delete(oldest);
+        await this.app.fileManager.trashFile(oldest);
       }
     }
   }
 
-  async getSnapshots(path: string): Promise<string> {
+  getSnapshots(path: string): string {
     const encoded = path.replace(/\//g, "--");
     const folderPath = `${this.SNAPSHOTS_DIR}/${encoded}`;
     const folder = this.app.vault.getAbstractFileByPath(folderPath);
@@ -139,7 +139,7 @@ export class VaultTools {
           this.vectorCache = parsed;
           return this.vectorCache!;
         }
-      } catch { /* corrupted — start fresh */ }
+      } catch (e) { console.debug("Vector store parse failed:", e); }
     }
     this.vectorCache = { version: 1, model: modelId, entries: [] };
     return this.vectorCache;
@@ -194,7 +194,7 @@ export class VaultTools {
       });
       if (response.status !== 200) return null;
       return response.json?.data?.[0]?.embedding || null;
-    } catch { return null; }
+    } catch (e) { console.debug("OpenAI embedding failed:", e); return null; }
   }
 
   private async getOpenAIEmbeddings(texts: string[]): Promise<(number[] | null)[]> {
@@ -219,7 +219,7 @@ export class VaultTools {
         if (item.index < texts.length) results[item.index] = item.embedding;
       }
       return results;
-    } catch { return texts.map(() => null); }
+    } catch (e) { console.debug("OpenAI batch embedding failed:", e); return texts.map(() => null); }
   }
 
   // ── Gemini ──
@@ -238,7 +238,7 @@ export class VaultTools {
       });
       if (response.status !== 200) return null;
       return response.json?.embedding?.values || null;
-    } catch { return null; }
+    } catch (e) { console.debug("Gemini embedding failed:", e); return null; }
   }
 
   private async getGeminiEmbeddings(texts: string[]): Promise<(number[] | null)[]> {
@@ -265,7 +265,7 @@ export class VaultTools {
         }
       }
       return results;
-    } catch { return results; }
+    } catch (e) { console.debug("Gemini batch embedding failed:", e); return results; }
   }
 
   // ─── BM25 + Vietnamese Normalization ──────────────────────────
@@ -450,7 +450,7 @@ export class VaultTools {
     return `Moved: ${from} → ${to}`;
   }
 
-  async listFolder(path: string): Promise<string> {
+  listFolder(path: string): string {
     const targetPath = path || "/";
     const folder = targetPath === "/"
       ? this.app.vault.getRoot()
@@ -472,7 +472,7 @@ export class VaultTools {
     return items.length > 0 ? items.join("\n") : "(empty folder)";
   }
 
-  async getRecentNotes(days: number): Promise<string> {
+  getRecentNotes(days: number): string {
     const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
     const files = this.app.vault.getMarkdownFiles();
 
@@ -502,7 +502,7 @@ export class VaultTools {
     return `Appended to: ${path}`;
   }
 
-  async readProperties(path: string): Promise<string> {
+  readProperties(path: string): string {
     const file = this.app.vault.getAbstractFileByPath(path);
     if (!file || !(file instanceof TFile)) return `File not found: ${path}`;
     const cache = this.app.metadataCache.getFileCache(file);
@@ -525,7 +525,7 @@ export class VaultTools {
     return `Updated properties on: ${path}`;
   }
 
-  async getTags(): Promise<string> {
+  getTags(): string {
     const tagCounts: Record<string, number> = {};
     for (const file of this.app.vault.getMarkdownFiles()) {
       const cache = this.app.metadataCache.getFileCache(file);
@@ -542,7 +542,7 @@ export class VaultTools {
       .join("\n");
   }
 
-  async searchByTag(tag: string): Promise<string> {
+  searchByTag(tag: string): string {
     const normalized = tag.startsWith("#") ? tag : "#" + tag;
     const results: string[] = [];
     for (const file of this.app.vault.getMarkdownFiles()) {
@@ -557,7 +557,7 @@ export class VaultTools {
     return results.length > 0 ? results.join("\n") : `No notes found with tag ${normalized}`;
   }
 
-  async getVaultStats(): Promise<string> {
+  getVaultStats(): string {
     const files = this.app.vault.getMarkdownFiles();
     const folders = new Set<string>();
     const tagSet = new Set<string>();
@@ -587,7 +587,7 @@ export class VaultTools {
 
   // ─── Graph Tools ────────────────────────────────────────────────
 
-  async getBacklinks(path: string): Promise<string> {
+  getBacklinks(path: string): string {
     const resolvedLinks = this.app.metadataCache.resolvedLinks;
     const backlinks: string[] = [];
     for (const [sourcePath, targets] of Object.entries(resolvedLinks)) {
@@ -600,7 +600,7 @@ export class VaultTools {
       : `No backlinks found for ${path}`;
   }
 
-  async getOutgoingLinks(path: string): Promise<string> {
+  getOutgoingLinks(path: string): string {
     const file = this.app.vault.getAbstractFileByPath(path);
     if (!file || !(file instanceof TFile)) return `File not found: ${path}`;
     const cache = this.app.metadataCache.getFileCache(file);
@@ -726,7 +726,7 @@ export class VaultTools {
     });
 
     const response = await requestUrl({
-      url: `https://api.search.brave.com/res/v1/web/search?${params}`,
+      url: `https://api.search.brave.com/res/v1/web/search?${params.toString()}`,
       method: "GET",
       headers: {
         "Accept": "application/json",
@@ -915,7 +915,7 @@ export class VaultTools {
             }
             cosineScores = this.normScores(raw);
           }
-        } catch { /* fallback to BM25 only */ }
+        } catch (e) { console.debug("Embedding recall failed:", e); }
       }
 
       // Combine and sort

@@ -82,29 +82,31 @@ export default class LifeCompanionPlugin extends Plugin {
     this.registerView(VIEW_TYPE_CHAT, (leaf) => new ChatView(leaf, this));
 
     this.addRibbonIcon("message-circle", "Life Companion AI", () => {
-      this.activateView();
+      void this.activateView();
     });
 
     this.addCommand({
       id: "open-chat",
-      name: "Open Life Companion AI",
-      callback: () => this.activateView(),
+      name: "Open chat",
+      callback: () => { void this.activateView(); },
     });
 
     this.addSettingTab(new LifeCompanionSettingTab(this.app, this));
 
-    this.app.workspace.onLayoutReady(async () => {
-      await this.profileManager.ensureLifeFolder();
-      if (this.settings.openaiApiKey || this.settings.geminiApiKey) {
-        this.vaultTools.backfillEmbeddings().catch((e) =>
-          console.warn("Memory backfill failed:", e)
-        );
-      }
+    this.app.workspace.onLayoutReady(() => {
+      void (async () => {
+        await this.profileManager.ensureLifeFolder();
+        if (this.settings.openaiApiKey || this.settings.geminiApiKey) {
+          this.vaultTools.backfillEmbeddings().catch((e) =>
+            console.warn("Memory backfill failed:", e)
+          );
+        }
+      })();
     });
   }
 
-  async onunload() {
-    this.app.workspace.detachLeavesOfType(VIEW_TYPE_CHAT);
+  onunload() {
+    // Obsidian handles view cleanup automatically
   }
 
   private initAIClient() {
@@ -146,7 +148,8 @@ export default class LifeCompanionPlugin extends Plugin {
             geminiApiKey: this.settings.geminiApiKey,
             groqApiKey: this.settings.groqApiKey,
           };
-        } catch {
+        } catch (e) {
+          console.debug("Auth retry failed:", e);
           return null;
         }
       },
@@ -218,7 +221,7 @@ export default class LifeCompanionPlugin extends Plugin {
         if (tabIdx >= 0) this.settings.openTabs.splice(tabIdx, 1);
       }
     }
-    this.saveData(this.settings);
+    void this.saveData(this.settings);
   }
 
   async activateView() {
@@ -248,7 +251,7 @@ export default class LifeCompanionPlugin extends Plugin {
     return getProvider(model);
   }
 
-  async handleMessage(text: string, conversation: ConversationState, view: ChatView, attachments?: Attachment[]) {
+  async handleMessage(text: string, conversation: ConversationState, view: ChatView, attachments?: Attachment[], abortSignal?: AbortSignal) {
     const t = getI18n(this.settings.language);
     const provider = this.resolveProvider(conversation.model);
 
@@ -318,6 +321,7 @@ export default class LifeCompanionPlugin extends Plugin {
         toolExecutor: (name, input) => this.executeTool(name, input),
         tools,
         attachments: attachments || [],
+        abortSignal,
         onText: (chunk) => {
           if (!thinkingStopped) {
             view.stopThinking();
@@ -343,6 +347,9 @@ export default class LifeCompanionPlugin extends Plugin {
           }
         },
       });
+      // If aborted by user, skip all post-processing — UI already handled by ChatView
+      if (abortSignal?.aborted) return;
+
       let response = aiResponse.text;
       view.stopStreaming();
 
@@ -381,6 +388,7 @@ export default class LifeCompanionPlugin extends Plugin {
           toolExecutor: (name, input) => this.executeTool(name, input),
           tools,
           attachments: [],
+          abortSignal,
           onText: (chunk) => {
             if (!retryThinkingStopped) {
               view.stopThinking();
@@ -483,6 +491,8 @@ export default class LifeCompanionPlugin extends Plugin {
     } catch (error) {
       view.stopThinking();
       view.stopStreaming();
+      // If aborted by user, UI already handled by ChatView click handler
+      if (abortSignal?.aborted) return;
       let msg = error instanceof Error ? error.message : "Unknown error";
       // Friendly message for OAuth token expiry
       if (msg.includes("401") && msg.includes("authentication_error")) {
@@ -492,7 +502,7 @@ export default class LifeCompanionPlugin extends Plugin {
         // Clear expired token so user can re-authenticate
         this.settings.accessToken = "";
         this.settings.refreshToken = "";
-        this.saveData(this.settings);
+        void this.saveData(this.settings);
       }
       view.addAssistantMessage(t.error(msg));
       new Notice(`Life Companion AI: ${msg}`);

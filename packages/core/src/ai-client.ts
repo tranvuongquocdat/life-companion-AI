@@ -14,10 +14,59 @@ export interface HttpRequestOptions {
 export interface HttpResponse {
   status: number;
   text: string;
-  json: any; // eslint-disable-line @typescript-eslint/no-explicit-any
+  json: unknown;
 }
 
 export type HttpClient = (req: HttpRequestOptions) => Promise<HttpResponse>;
+
+// ─── AI Provider Response Types ──────────────────────────────────────
+interface ClaudeContentBlock {
+  type: string;
+  text?: string;
+  id?: string;
+  name?: string;
+  input?: Record<string, unknown>;
+  thinking?: string;
+}
+
+interface ClaudeResponse {
+  content: ClaudeContentBlock[];
+  stop_reason: string;
+  usage?: {
+    input_tokens: number;
+    output_tokens: number;
+    cache_read_input_tokens?: number;
+    cache_creation_input_tokens?: number;
+  };
+}
+
+interface OpenAIToolCall {
+  id: string;
+  function: { name: string; arguments: string };
+}
+
+interface OpenAIMessage {
+  role: string;
+  content: string | null;
+  tool_calls?: OpenAIToolCall[];
+}
+
+interface OpenAIResponse {
+  choices: { message: OpenAIMessage; finish_reason: string }[];
+  usage?: { prompt_tokens: number; completion_tokens: number };
+}
+
+interface GeminiPart {
+  text?: string;
+  functionCall?: { name: string; args: Record<string, unknown> };
+  functionResponse?: { name: string; response: { result: string } };
+  inlineData?: { mimeType: string; data: string };
+}
+
+interface GeminiResponse {
+  candidates?: { content: { parts: GeminiPart[] } }[];
+  usageMetadata?: { promptTokenCount: number; candidatesTokenCount: number };
+}
 
 // ─── Send options ──────────────────────────────────────────────
 
@@ -31,6 +80,7 @@ export interface SendMessageOptions {
   toolExecutor: (name: string, input: Record<string, unknown>) => Promise<string>;
   tools?: ToolDefinition[];
   attachments?: Attachment[];
+  abortSignal?: AbortSignal;
   onText: (text: string) => void;
   onThinking?: (text: string) => void;
   onToolUse: (toolName: string, input: Record<string, unknown>) => void;
@@ -93,7 +143,6 @@ export class AIClient {
     }
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   async summarize(text: string, systemPrompt: string, provider: AIProvider, model: string): Promise<AIResponse> {
     switch (provider) {
       case "claude": {
@@ -118,9 +167,9 @@ export class AIClient {
           }
         }
         if (res.status !== 200) throw new Error(`Summarize failed: ${res.status}`);
-        const d = res.json;
+        const d = res.json as ClaudeResponse;
         return {
-          text: d.content?.map((b: any) => b.text || "").join("") || "", // eslint-disable-line @typescript-eslint/no-explicit-any
+          text: d.content?.map((b: ClaudeContentBlock) => b.text || "").join("") || "",
           usage: { inputTokens: d.usage?.input_tokens || 0, outputTokens: d.usage?.output_tokens || 0 },
         };
       }
@@ -140,7 +189,7 @@ export class AIClient {
           throw: false,
         });
         if (res.status !== 200) throw new Error(`Summarize failed: ${res.status}`);
-        const d = res.json;
+        const d = res.json as OpenAIResponse;
         return {
           text: d.choices?.[0]?.message?.content || "",
           usage: { inputTokens: d.usage?.prompt_tokens || 0, outputTokens: d.usage?.completion_tokens || 0 },
@@ -158,9 +207,9 @@ export class AIClient {
           throw: false,
         });
         if (res.status !== 200) throw new Error(`Summarize failed: ${res.status}`);
-        const d = res.json;
+        const d = res.json as GeminiResponse;
         return {
-          text: d.candidates?.[0]?.content?.parts?.map((p: any) => p.text || "").join("") || "", // eslint-disable-line @typescript-eslint/no-explicit-any
+          text: d.candidates?.[0]?.content?.parts?.map((p: GeminiPart) => p.text || "").join("") || "",
           usage: { inputTokens: d.usageMetadata?.promptTokenCount || 0, outputTokens: d.usageMetadata?.candidatesTokenCount || 0 },
         };
       }
@@ -191,18 +240,15 @@ export class AIClient {
     const { model, systemPrompt, conversationHistory, onText, onToolUse, onToolResult } = options;
     const isDive = options.mode === "dive";
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const messages: any[] = conversationHistory.map((m) => ({
+    const messages: { role: string; content: string | ClaudeContentBlock[] | { type: string; tool_use_id: string; content: string }[] }[] = conversationHistory.map((m) => ({
       role: m.role,
       content: m.content,
     }));
     const userContent = this.formatClaudeUserContent(options.userMessage, options.attachments || []);
     messages.push({ role: "user", content: userContent });
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const toolDefs = (options.tools || []).map((t, idx, arr) => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const def: Record<string, any> = {
+      const def: Record<string, unknown> = {
         name: t.name,
         description: t.description,
         input_schema: t.input_schema,
@@ -217,10 +263,11 @@ export class AIClient {
     let fullResponse = "";
     const totalUsage: TokenUsage = { inputTokens: 0, outputTokens: 0 };
     let authRetried = false;
+    const signal = options.abortSignal;
 
     while (true) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const body: Record<string, any> = {
+      if (signal?.aborted) break;
+      const body: Record<string, unknown> = {
         model,
         max_tokens: isDive ? 16000 : 4096,
         system: [{ type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } }],
@@ -257,7 +304,7 @@ export class AIClient {
         throw new Error(`${response.status} ${response.text}`);
       }
 
-      const data = response.json;
+      const data = response.json as ClaudeResponse;
 
       // Extract usage — use `=` for input (last iteration = full context), `+=` for output
       if (data.usage) {
@@ -268,8 +315,7 @@ export class AIClient {
       }
 
       const textParts: string[] = [];
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const toolUseBlocks: any[] = [];
+      const toolUseBlocks: ClaudeContentBlock[] = [];
 
       for (const block of data.content) {
         if (block.type === "thinking") {
@@ -278,11 +324,11 @@ export class AIClient {
             options.onThinking(block.thinking);
           }
         } else if (block.type === "text") {
-          textParts.push(block.text);
-          await this.simulateStream(block.text, onText);
+          textParts.push(block.text!);
+          await this.simulateStream(block.text!, onText);
         } else if (block.type === "tool_use") {
           toolUseBlocks.push(block);
-          onToolUse(block.name, block.input);
+          onToolUse(block.name!, block.input!);
         }
       }
 
@@ -291,14 +337,16 @@ export class AIClient {
       messages.push({ role: "assistant", content: data.content });
 
       if (data.stop_reason === "end_turn" || toolUseBlocks.length === 0) break;
+      if (signal?.aborted) break;
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const toolResults: any[] = [];
+      const toolResults: { type: string; tool_use_id: string; content: string }[] = [];
       for (const toolUse of toolUseBlocks) {
-        const result = await options.toolExecutor(toolUse.name, toolUse.input as Record<string, unknown>);
-        onToolResult(toolUse.name, result);
-        toolResults.push({ type: "tool_result", tool_use_id: toolUse.id, content: result });
+        if (signal?.aborted) break;
+        const result = await options.toolExecutor(toolUse.name!, toolUse.input as Record<string, unknown>);
+        onToolResult(toolUse.name!, result);
+        toolResults.push({ type: "tool_result", tool_use_id: toolUse.id!, content: result });
       }
+      if (signal?.aborted) break;
       messages.push({ role: "user", content: toolResults });
     }
 
@@ -315,8 +363,7 @@ export class AIClient {
     const { model, systemPrompt, conversationHistory, onText, onToolUse, onToolResult } = options;
 
     const userContent = this.formatOpenAIUserContent(options.userMessage, options.attachments || []);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const messages: any[] = [
+    const messages: Record<string, unknown>[] = [
       { role: "system", content: systemPrompt },
       ...conversationHistory.map((m) => ({ role: m.role, content: m.content })),
       { role: "user", content: userContent },
@@ -333,10 +380,11 @@ export class AIClient {
 
     let fullResponse = "";
     const totalUsage: TokenUsage = { inputTokens: 0, outputTokens: 0 };
+    const signal = options.abortSignal;
 
     while (true) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const body: Record<string, any> = { model, messages };
+      if (signal?.aborted) break;
+      const body: Record<string, unknown> = { model, messages };
       // OpenAI newer models all use max_completion_tokens; Groq uses max_tokens
       if (apiUrl.includes("openai.com")) {
         body.max_completion_tokens = 4096;
@@ -360,7 +408,7 @@ export class AIClient {
         throw new Error(`${response.status} ${response.text}`);
       }
 
-      const data = response.json;
+      const data = response.json as OpenAIResponse;
 
       if (data.usage) {
         totalUsage.inputTokens = data.usage.prompt_tokens || 0;
@@ -375,18 +423,20 @@ export class AIClient {
         await this.simulateStream(msg.content, onText);
       }
 
-      messages.push(msg);
+      messages.push(msg as unknown as Record<string, unknown>);
 
       if (choice.finish_reason !== "tool_calls" || !msg.tool_calls?.length) break;
 
-      for (const toolCall of msg.tool_calls) {
+      for (const toolCall of msg.tool_calls!) {
+        if (signal?.aborted) break;
         const fn = toolCall.function;
-        const args = JSON.parse(fn.arguments);
+        const args = JSON.parse(fn.arguments) as Record<string, unknown>;
         onToolUse(fn.name, args);
         const result = await options.toolExecutor(fn.name, args);
         onToolResult(fn.name, result);
         messages.push({ role: "tool", tool_call_id: toolCall.id, content: result });
       }
+      if (signal?.aborted) break;
     }
 
     return { text: fullResponse, usage: totalUsage };
@@ -396,9 +446,9 @@ export class AIClient {
 
   private async sendGemini(options: SendMessageOptions): Promise<AIResponse> {
     const { model, systemPrompt, conversationHistory, onText, onToolUse, onToolResult } = options;
+    const signal = options.abortSignal;
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const contents: any[] = conversationHistory.map((m) => ({
+    const contents: { role: string; parts: GeminiPart[] }[] = conversationHistory.map((m) => ({
       role: m.role === "assistant" ? "model" : "user",
       parts: [{ text: m.content }],
     }));
@@ -412,8 +462,9 @@ export class AIClient {
     const apiKey = this.auth.geminiApiKey || "";
 
     while (true) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const body: Record<string, any> = {
+      if (signal?.aborted) break;
+
+      const body: Record<string, unknown> = {
         contents,
         systemInstruction: { parts: [{ text: systemPrompt }] },
       };
@@ -439,7 +490,7 @@ export class AIClient {
         throw new Error(`${response.status} ${response.text}`);
       }
 
-      const data = response.json;
+      const data = response.json as GeminiResponse;
 
       if (data.usageMetadata) {
         totalUsage.inputTokens = data.usageMetadata.promptTokenCount || 0;
@@ -451,8 +502,7 @@ export class AIClient {
 
       const parts = candidate.content?.parts || [];
       const textParts: string[] = [];
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const functionCalls: any[] = [];
+      const functionCalls: { name: string; args: Record<string, unknown> }[] = [];
 
       for (const part of parts) {
         if (part.text) {
@@ -468,16 +518,18 @@ export class AIClient {
       contents.push({ role: "model", parts: candidate.content.parts });
 
       if (functionCalls.length === 0) break;
+      if (signal?.aborted) break;
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const functionResponses: any[] = [];
+      const functionResponses: GeminiPart[] = [];
       for (const fc of functionCalls) {
+        if (signal?.aborted) break;
         const result = await options.toolExecutor(fc.name, fc.args || {});
         onToolResult(fc.name, result);
         functionResponses.push({
           functionResponse: { name: fc.name, response: { result } },
         });
       }
+      if (signal?.aborted) break;
       contents.push({ role: "user", parts: functionResponses });
     }
 
@@ -486,29 +538,25 @@ export class AIClient {
 
   // ─── Attachment formatters ───────────────────────────────────────────
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private formatClaudeUserContent(text: string, attachments: Attachment[]): any {
+  private formatClaudeUserContent(text: string, attachments: Attachment[]): string | ClaudeContentBlock[] {
     if (attachments.length === 0) return text;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const blocks: any[] = [];
+    const blocks: ClaudeContentBlock[] = [];
     for (const att of attachments) {
       if (att.type === "text") {
         blocks.push({ type: "text", text: `[File: ${att.name}]\n${att.data}` });
       } else if (att.type === "image") {
-        blocks.push({ type: "image", source: { type: "base64", media_type: att.mimeType, data: att.data } });
+        blocks.push({ type: "image", source: { type: "base64", media_type: att.mimeType, data: att.data } } as unknown as ClaudeContentBlock);
       } else if (att.type === "pdf") {
-        blocks.push({ type: "document", source: { type: "base64", media_type: "application/pdf", data: att.data } });
+        blocks.push({ type: "document", source: { type: "base64", media_type: "application/pdf", data: att.data } } as unknown as ClaudeContentBlock);
       }
     }
     blocks.push({ type: "text", text });
     return blocks;
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private formatOpenAIUserContent(text: string, attachments: Attachment[]): any {
+  private formatOpenAIUserContent(text: string, attachments: Attachment[]): string | Record<string, unknown>[] {
     if (attachments.length === 0) return text;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const parts: any[] = [];
+    const parts: Record<string, unknown>[] = [];
     for (const att of attachments) {
       if (att.type === "text") {
         parts.push({ type: "text", text: `[File: ${att.name}]\n${att.data}` });
@@ -522,11 +570,9 @@ export class AIClient {
     return parts;
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private formatGeminiUserParts(text: string, attachments: Attachment[]): any[] {
+  private formatGeminiUserParts(text: string, attachments: Attachment[]): GeminiPart[] {
     if (attachments.length === 0) return [{ text }];
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const parts: any[] = [];
+    const parts: GeminiPart[] = [];
     for (const att of attachments) {
       if (att.type === "text") {
         parts.push({ text: `[File: ${att.name}]\n${att.data}` });

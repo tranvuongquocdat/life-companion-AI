@@ -4,10 +4,12 @@ import {
   ALL_TOOLS, MODEL_GROUPS, getEffectiveModelGroups,
   VAULT_TOOLS, KNOWLEDGE_TOOLS, GRAPH_TOOLS, TASK_TOOLS, DAILY_TOOLS, CALENDAR_TOOLS, WEB_TOOLS, MEMORY_TOOLS,
   getI18n,
-  type AIModel, type AIProvider, type I18n, type Language,
+  type AIModel, type AIProvider, type I18n, type Language, type LifeCompanionSettings,
 } from "@life-companion/core";
 import { readClaudeCodeCredentials } from "./auth";
 import { SyncthingClient } from "./syncthing";
+
+interface FetchedModel { id: string; name?: string; supportedGenerationMethods?: string[] }
 
 export class LifeCompanionSettingTab extends PluginSettingTab {
   plugin: LifeCompanionPlugin;
@@ -29,7 +31,7 @@ export class LifeCompanionSettingTab extends PluginSettingTab {
 
     const t = this.t;
 
-    containerEl.createEl("h2", { text: t.settingsTitle });
+    new Setting(containerEl).setName(t.settingsTitle).setHeading();
 
     // ─── Language ───────────────────────────────────────────────
     new Setting(containerEl)
@@ -39,15 +41,15 @@ export class LifeCompanionSettingTab extends PluginSettingTab {
         dropdown.addOption("en", "English");
         dropdown.addOption("vi", "Tiếng Việt");
         dropdown.setValue(this.plugin.settings.language);
-        dropdown.onChange(async (value) => {
+        dropdown.onChange((value) => { void (async () => {
           this.plugin.settings.language = value as Language;
           await this.plugin.saveSettings();
           this.display();
-        });
+        })(); });
       });
 
     // ─── Default Models ──────────────────────────────────────────
-    containerEl.createEl("h3", { text: t.defaultModels });
+    new Setting(containerEl).setName(t.defaultModels).setHeading();
 
     const hasAnyProvider = MODEL_GROUPS.some((g) => this.plugin.hasCredentialsFor(g.provider));
 
@@ -71,7 +73,7 @@ export class LifeCompanionSettingTab extends PluginSettingTab {
     }
 
     // ─── Providers (collapsible per provider) ──────────────────
-    containerEl.createEl("h3", { text: t.apiProviders });
+    new Setting(containerEl).setName(t.apiProviders).setHeading();
 
     this.renderProviderSection(containerEl, "claude", "Claude (Anthropic)");
     this.renderProviderSection(containerEl, "openai", "OpenAI");
@@ -79,36 +81,36 @@ export class LifeCompanionSettingTab extends PluginSettingTab {
     this.renderProviderSection(containerEl, "groq", "Groq");
 
     // ─── Available Tools ──────────────────────────────────────────
-    containerEl.createEl("h3", { text: t.availableTools });
+    new Setting(containerEl).setName(t.availableTools).setHeading();
     containerEl.createEl("p", {
       text: t.availableToolsDesc,
       cls: "setting-item-description",
     });
 
-    this.renderToolSection(containerEl, "Vault Tools", ALL_TOOLS.filter((t) => t.category === "vault"));
-    this.renderToolSection(containerEl, "Knowledge Tools", ALL_TOOLS.filter((t) => t.category === "knowledge"));
-    this.renderToolSection(containerEl, "Graph Tools", ALL_TOOLS.filter((t) => t.category === "graph"));
-    this.renderToolSection(containerEl, "Task Tools", ALL_TOOLS.filter((t) => t.category === "task"));
-    this.renderToolSection(containerEl, "Daily Notes Tools", ALL_TOOLS.filter((t) => t.category === "daily"));
-    this.renderToolSection(containerEl, "Calendar Tools", ALL_TOOLS.filter((t) => t.category === "calendar"));
-    this.renderToolSection(containerEl, "Web Tools", ALL_TOOLS.filter((t) => t.category === "web"));
-    this.renderToolSection(containerEl, "Memory & Goals Tools", ALL_TOOLS.filter((t) => t.category === "memory"));
+    this.renderToolSection(containerEl, "Vault tools", ALL_TOOLS.filter((t) => t.category === "vault"));
+    this.renderToolSection(containerEl, "Knowledge tools", ALL_TOOLS.filter((t) => t.category === "knowledge"));
+    this.renderToolSection(containerEl, "Graph tools", ALL_TOOLS.filter((t) => t.category === "graph"));
+    this.renderToolSection(containerEl, "Task tools", ALL_TOOLS.filter((t) => t.category === "task"));
+    this.renderToolSection(containerEl, "Daily notes tools", ALL_TOOLS.filter((t) => t.category === "daily"));
+    this.renderToolSection(containerEl, "Calendar tools", ALL_TOOLS.filter((t) => t.category === "calendar"));
+    this.renderToolSection(containerEl, "Web tools", ALL_TOOLS.filter((t) => t.category === "web"));
+    this.renderToolSection(containerEl, "Memory & goals tools", ALL_TOOLS.filter((t) => t.category === "memory"));
 
     // ─── Calendar Settings ──────────────────────────────────
-    containerEl.createEl("h3", { text: "Calendar" });
+    new Setting(containerEl).setName("Calendar").setHeading();
     const calCard = containerEl.createDiv({ cls: "lc-section-card" });
 
     new Setting(calCard)
-      .setName("Events Directory")
+      .setName("Events directory")
       .setDesc("Fallback events directory if Full Calendar auto-detect fails. Leave empty to auto-detect.")
       .addText((text) =>
         text
           .setPlaceholder("calendar")
           .setValue(this.plugin.settings.calendarEventsDirectory)
-          .onChange(async (value) => {
+          .onChange((value) => { void (async () => {
             this.plugin.settings.calendarEventsDirectory = value;
             await this.plugin.saveSettings();
-          })
+          })(); })
       );
 
     new Setting(calCard)
@@ -118,14 +120,14 @@ export class LifeCompanionSettingTab extends PluginSettingTab {
         drop
           .addOptions({ "1": "Monday", "0": "Sunday", "6": "Saturday" })
           .setValue(String(this.plugin.settings.calendarStartDay ?? 1))
-          .onChange(async (value) => {
+          .onChange((value) => { void (async () => {
             this.plugin.settings.calendarStartDay = Number(value) as 0 | 1 | 6;
             await this.plugin.saveSettings();
-          })
+          })(); })
       );
 
     // ─── Web Search ────────────────────────────────────────────
-    containerEl.createEl("h3", { text: "Web Search" });
+    new Setting(containerEl).setName("Web search").setHeading();
     const webCard = containerEl.createDiv({ cls: "lc-section-card" });
 
     const braveKey = this.plugin.settings.braveSearchApiKey;
@@ -134,33 +136,33 @@ export class LifeCompanionSettingTab extends PluginSettingTab {
         .setName("Brave Search API")
         .setDesc("Connected — 2,000 free queries/month. Falls back to DuckDuckGo when quota exceeded.")
         .addButton((btn) =>
-          btn.setButtonText("Remove").onClick(async () => {
+          btn.setButtonText("Remove").onClick(() => { void (async () => {
             this.plugin.settings.braveSearchApiKey = "";
             await this.plugin.saveSettings();
             this.display();
-          })
+          })(); })
         );
     } else {
       let keyValue = "";
       new Setting(webCard)
-        .setName("Brave Search API Key")
+        .setName("Brave Search API key")
         .setDesc("Optional — get free key at brave.com/search/api (2,000 queries/month). Without it, DuckDuckGo is used.")
         .addText((text) =>
           text.setPlaceholder("BSA...").onChange((v) => { keyValue = v; })
         )
         .addButton((btn) =>
-          btn.setButtonText("Save").onClick(async () => {
+          btn.setButtonText("Save").onClick(() => { void (async () => {
             if (!keyValue.trim()) return;
             this.plugin.settings.braveSearchApiKey = keyValue.trim();
             await this.plugin.saveSettings();
             new Notice("Brave Search API key saved");
             this.display();
-          })
+          })(); })
         );
     }
 
     // ─── Snapshots ─────────────────────────────────────────────
-    containerEl.createEl("h3", { text: "Snapshots" });
+    new Setting(containerEl).setName("Snapshots").setHeading();
     const snapCard = containerEl.createDiv({ cls: "lc-section-card" });
 
     new Setting(snapCard)
@@ -169,11 +171,11 @@ export class LifeCompanionSettingTab extends PluginSettingTab {
       .addToggle((toggle) =>
         toggle
           .setValue(this.plugin.settings.snapshotsEnabled)
-          .onChange(async (value) => {
+          .onChange((value) => { void (async () => {
             this.plugin.settings.snapshotsEnabled = value;
             await this.plugin.saveSettings();
             this.display();
-          })
+          })(); })
       );
 
     if (this.plugin.settings.snapshotsEnabled) {
@@ -185,15 +187,15 @@ export class LifeCompanionSettingTab extends PluginSettingTab {
             .setLimits(1, 10, 1)
             .setValue(this.plugin.settings.maxSnapshotsPerFile)
             .setDynamicTooltip()
-            .onChange(async (value) => {
+            .onChange((value) => { void (async () => {
               this.plugin.settings.maxSnapshotsPerFile = value;
               await this.plugin.saveSettings();
-            })
+            })(); })
         );
     }
 
     // ─── Vault Sync ──────────────────────────────────────────────
-    containerEl.createEl("h3", { text: "Vault Sync" });
+    new Setting(containerEl).setName("Vault sync").setHeading();
     const syncCard = containerEl.createDiv({ cls: "lc-section-card" });
     syncCard.createEl("p", {
       text: "Sync your vault with a server for Telegram bot, scheduled briefings, and mobile access.",
@@ -227,20 +229,9 @@ export class LifeCompanionSettingTab extends PluginSettingTab {
         .setDesc("Not detected — install Syncthing to enable vault sync.")
         .addButton((btn) =>
           btn.setButtonText("How to install").onClick(() => {
-            const infoEl = statusEl.createDiv({ cls: "lc-install-guide" });
-            infoEl.style.padding = "12px";
-            infoEl.style.marginTop = "8px";
-            infoEl.style.border = "1px solid var(--background-modifier-border)";
-            infoEl.style.borderRadius = "8px";
-            infoEl.style.backgroundColor = "var(--background-secondary)";
+            const infoEl = statusEl.createDiv({ cls: "lc-install-guide lc-settings-info" });
             infoEl.createEl("p", { text: "Run this in your terminal:" });
-            const codeBlock = infoEl.createEl("pre");
-            codeBlock.style.padding = "8px";
-            codeBlock.style.borderRadius = "4px";
-            codeBlock.style.backgroundColor = "var(--background-primary)";
-            codeBlock.style.userSelect = "all";
-            codeBlock.style.whiteSpace = "pre-wrap";
-            codeBlock.style.wordBreak = "break-all";
+            const codeBlock = infoEl.createEl("pre", { cls: "lc-settings-code" });
             codeBlock.textContent = installCmd;
             infoEl.createEl("p", { text: "Then click Re-check below." });
             btn.setDisabled(true);
@@ -287,12 +278,12 @@ export class LifeCompanionSettingTab extends PluginSettingTab {
         .setName("Syncthing")
         .setDesc(`Connected · ${stateText}`)
         .addButton((btn) =>
-          btn.setButtonText("Disconnect").onClick(async () => {
+          btn.setButtonText("Disconnect").onClick(() => { void (async () => {
             this.plugin.settings.syncDeviceId = "";
             this.plugin.settings.syncEnabled = false;
             await this.plugin.saveSettings();
             this.display();
-          })
+          })(); })
         )
         .addButton((btn) =>
           btn.setButtonText("Refresh").onClick(() => {
@@ -307,7 +298,7 @@ export class LifeCompanionSettingTab extends PluginSettingTab {
 
       let deviceIdValue = "";
       new Setting(statusEl)
-        .setName("Server Device ID")
+        .setName("Server device ID")
         .setDesc("Shown at the end of the server setup script")
         .addText((text) =>
           text
@@ -315,7 +306,7 @@ export class LifeCompanionSettingTab extends PluginSettingTab {
             .onChange((v) => { deviceIdValue = v; })
         )
         .addButton((btn) =>
-          btn.setButtonText("Connect").setCta().onClick(async () => {
+          btn.setButtonText("Connect").setCta().onClick(() => { void (async () => {
             const id = deviceIdValue.trim();
             if (!id) { new Notice("Enter the Server Device ID first"); return; }
 
@@ -332,8 +323,8 @@ export class LifeCompanionSettingTab extends PluginSettingTab {
             }
 
             // Get vault path from Obsidian
-            const vaultPath = (this.app.vault.adapter as any).getBasePath?.()
-              || (this.app.vault.adapter as any).basePath || "";
+            const vaultPath = (this.app.vault.adapter as unknown as { getBasePath?: () => string }).getBasePath?.()
+              || (this.app.vault.adapter as unknown as { basePath?: string }).basePath || "";
 
             if (!vaultPath) {
               new Notice("Could not detect vault path");
@@ -357,7 +348,7 @@ export class LifeCompanionSettingTab extends PluginSettingTab {
             await this.plugin.saveSettings();
             new Notice("Vault sync configured! Syncing will start shortly.");
             this.display();
-          })
+          })(); })
         );
 
       // Server setup link
@@ -415,7 +406,7 @@ export class LifeCompanionSettingTab extends PluginSettingTab {
       new Setting(body)
         .setName(t.refreshModels)
         .addButton((btn) =>
-          btn.setButtonText("↻ Refresh").onClick(async () => {
+          btn.setButtonText("↻ Refresh").onClick(() => { void (async () => {
             btn.setButtonText("...");
             btn.setDisabled(true);
             const models = await this.fetchModelsForProvider(provider);
@@ -430,7 +421,7 @@ export class LifeCompanionSettingTab extends PluginSettingTab {
               btn.setButtonText("↻ Refresh");
               btn.setDisabled(false);
             }
-          })
+          })(); })
         );
 
       const modelsLabel = body.createDiv({ cls: "lc-section-label" });
@@ -443,7 +434,7 @@ export class LifeCompanionSettingTab extends PluginSettingTab {
           .addToggle((toggle) => {
             toggle
               .setValue(this.plugin.settings.enabledModels.includes(model.id))
-              .onChange(async (value) => {
+              .onChange((value) => { void (async () => {
                 if (value) {
                   this.plugin.settings.enabledModels.push(model.id);
                 } else {
@@ -456,7 +447,7 @@ export class LifeCompanionSettingTab extends PluginSettingTab {
                     this.plugin.settings.enabledModels.filter((m) => m !== model.id);
                 }
                 await this.plugin.saveSettings();
-              });
+              })(); });
           });
         s.settingEl.addClass("lc-compact-item");
         const descEl = s.settingEl.querySelector(".setting-item-description");
@@ -493,9 +484,8 @@ export class LifeCompanionSettingTab extends PluginSettingTab {
       new Setting(body)
         .setName(t.connectedVia("API Key"))
         .addButton((btn) =>
-          btn.setButtonText(t.removeKey).onClick(async () => {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            (this.plugin.settings as any)[keyField] = "";
+          btn.setButtonText(t.removeKey).onClick(() => { void (async () => {
+            this.plugin.settings[keyField as keyof LifeCompanionSettings] = "" as never;
             const group = getEffectiveModelGroups(this.plugin.settings.customModels).find((g) => g.provider === provider);
             if (group) {
               const ids = group.models.map((m) => m.id);
@@ -507,24 +497,23 @@ export class LifeCompanionSettingTab extends PluginSettingTab {
             }
             await this.plugin.saveSettings();
             this.display();
-          })
+          })(); })
         );
     } else {
       let keyValue = "";
       new Setting(body)
-        .setName("API Key")
+        .setName("API key")
         .addText((text) =>
           text.setPlaceholder(placeholder).onChange((v) => { keyValue = v; })
         )
         .addButton((btn) =>
-          btn.setButtonText(t.verifySave).onClick(async () => {
+          btn.setButtonText(t.verifySave).onClick(() => { void (async () => {
             if (!keyValue.trim()) { new Notice(t.enterKeyFirst); return; }
             btn.setButtonText("...");
             btn.setDisabled(true);
             const ok = await this.verifyApiKey(provider, keyValue.trim());
             if (ok) {
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              (this.plugin.settings as any)[keyField] = keyValue.trim();
+              this.plugin.settings[keyField as keyof LifeCompanionSettings] = keyValue.trim() as never;
               await this.plugin.saveSettings();
               new Notice(t.keyVerified(label));
               this.display();
@@ -533,7 +522,7 @@ export class LifeCompanionSettingTab extends PluginSettingTab {
               btn.setButtonText(t.verifySave);
               btn.setDisabled(false);
             }
-          })
+          })(); })
         );
     }
   }
@@ -545,23 +534,23 @@ export class LifeCompanionSettingTab extends PluginSettingTab {
       new Setting(body)
         .setName(t.connectedVia("Claude Code"))
         .addButton((btn) =>
-          btn.setButtonText(t.disconnect).onClick(async () => {
+          btn.setButtonText(t.disconnect).onClick(() => { void (async () => {
             this.plugin.settings.accessToken = "";
             this.plugin.settings.refreshToken = "";
             this.plugin.settings.tokenExpiresAt = 0;
             await this.plugin.saveSettings();
             this.display();
-          })
+          })(); })
         );
     } else if (this.plugin.settings.claudeApiKey) {
       new Setting(body)
         .setName(t.connectedVia("API Key"))
         .addButton((btn) =>
-          btn.setButtonText(t.removeKey).onClick(async () => {
+          btn.setButtonText(t.removeKey).onClick(() => { void (async () => {
             this.plugin.settings.claudeApiKey = "";
             await this.plugin.saveSettings();
             this.display();
-          })
+          })(); })
         );
     } else {
       const s = new Setting(body).setName("Claude Code");
@@ -569,7 +558,7 @@ export class LifeCompanionSettingTab extends PluginSettingTab {
         btn
           .setButtonText(t.claudeCodeLogin)
           .setCta()
-          .onClick(async () => {
+          .onClick(() => { void (async () => {
             try {
               const tokens = readClaudeCodeCredentials();
               this.plugin.settings.accessToken = tokens.accessToken;
@@ -581,7 +570,7 @@ export class LifeCompanionSettingTab extends PluginSettingTab {
             } catch (e) {
               new Notice(`Error: ${(e as Error).message}`);
             }
-          })
+          })(); })
       );
 
       let keyValue = "";
@@ -591,7 +580,7 @@ export class LifeCompanionSettingTab extends PluginSettingTab {
           text.setPlaceholder("sk-ant-...").onChange((v) => { keyValue = v; })
         )
         .addButton((btn) =>
-          btn.setButtonText(t.verifySave).onClick(async () => {
+          btn.setButtonText(t.verifySave).onClick(() => { void (async () => {
             if (!keyValue.trim()) { new Notice(t.enterKeyFirst); return; }
             btn.setButtonText("...");
             btn.setDisabled(true);
@@ -606,7 +595,7 @@ export class LifeCompanionSettingTab extends PluginSettingTab {
               btn.setButtonText(t.verifySave);
               btn.setDisabled(false);
             }
-          })
+          })(); })
         );
     }
   }
@@ -652,7 +641,7 @@ export class LifeCompanionSettingTab extends PluginSettingTab {
         .addToggle((toggle) => {
           toggle
             .setValue(this.plugin.settings.enabledTools.includes(tool.name))
-            .onChange(async (value) => {
+            .onChange((value) => { void (async () => {
               if (value) {
                 this.plugin.settings.enabledTools.push(tool.name);
               } else {
@@ -660,7 +649,7 @@ export class LifeCompanionSettingTab extends PluginSettingTab {
                   this.plugin.settings.enabledTools.filter((n) => n !== tool.name);
               }
               await this.plugin.saveSettings();
-            });
+            })(); });
         });
       s.settingEl.addClass("lc-compact-item");
 
@@ -671,16 +660,15 @@ export class LifeCompanionSettingTab extends PluginSettingTab {
         nameEl.appendChild(infoBtn);
 
         const detailEl = createEl("div", {
-          cls: "lc-tool-detail",
+          cls: "lc-tool-detail lc-hidden",
           text: detailedDescs[tool.name] || tool.description,
         });
-        detailEl.style.display = "none";
         s.settingEl.after(detailEl);
 
         infoBtn.addEventListener("click", (e) => {
           e.stopPropagation();
-          const isVisible = detailEl.style.display !== "none";
-          detailEl.style.display = isVisible ? "none" : "block";
+          const isVisible = !detailEl.hasClass("lc-hidden");
+          detailEl.toggleClass("lc-hidden", isVisible);
           infoBtn.toggleClass("lc-tool-info-btn-active", !isVisible);
         });
       }
@@ -741,7 +729,6 @@ export class LifeCompanionSettingTab extends PluginSettingTab {
 
   // ─── Fetch Models from Provider API ────────────────────────────
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private async fetchModelsForProvider(provider: AIProvider): Promise<{ id: string; name: string }[]> {
     try {
       switch (provider) {
@@ -755,9 +742,9 @@ export class LifeCompanionSettingTab extends PluginSettingTab {
           const res = await requestUrl({ url: "https://api.anthropic.com/v1/models?limit=100", headers, throw: false });
           if (res.status !== 200) return [];
           return (res.json.data || [])
-            .filter((m: any) => !m.id.match(/-\d{8}$/)) // eslint-disable-line @typescript-eslint/no-explicit-any
-            .map((m: any) => ({ id: m.id, name: m.display_name || m.id })) // eslint-disable-line @typescript-eslint/no-explicit-any
-            .sort((a: any, b: any) => a.name.localeCompare(b.name)); // eslint-disable-line @typescript-eslint/no-explicit-any
+            .filter((m: FetchedModel) => !m.id.match(/-\d{8}$/))
+            .map((m: FetchedModel) => ({ id: m.id, name: (m as FetchedModel & { display_name?: string }).display_name || m.id }))
+            .sort((a: FetchedModel, b: FetchedModel) => (a.name ?? a.id).localeCompare(b.name ?? b.id));
         }
         case "openai": {
           const res = await requestUrl({
@@ -767,10 +754,10 @@ export class LifeCompanionSettingTab extends PluginSettingTab {
           });
           if (res.status !== 200) return [];
           return (res.json.data || [])
-            .filter((m: any) => /^(gpt-|o[134]|chatgpt-)/.test(m.id)) // eslint-disable-line @typescript-eslint/no-explicit-any
-            .filter((m: any) => !/(realtime|audio|search|transcrib)/.test(m.id)) // eslint-disable-line @typescript-eslint/no-explicit-any
-            .map((m: any) => ({ id: m.id, name: m.id })) // eslint-disable-line @typescript-eslint/no-explicit-any
-            .sort((a: any, b: any) => a.id.localeCompare(b.id)); // eslint-disable-line @typescript-eslint/no-explicit-any
+            .filter((m: FetchedModel) => /^(gpt-|o[134]|chatgpt-)/.test(m.id))
+            .filter((m: FetchedModel) => !/(realtime|audio|search|transcrib)/.test(m.id))
+            .map((m: FetchedModel) => ({ id: m.id, name: m.id }))
+            .sort((a: FetchedModel, b: FetchedModel) => a.id.localeCompare(b.id));
         }
         case "gemini": {
           const res = await requestUrl({
@@ -779,10 +766,10 @@ export class LifeCompanionSettingTab extends PluginSettingTab {
           });
           if (res.status !== 200) return [];
           return (res.json.models || [])
-            .filter((m: any) => m.supportedGenerationMethods?.includes("generateContent")) // eslint-disable-line @typescript-eslint/no-explicit-any
-            .filter((m: any) => m.name?.includes("gemini")) // eslint-disable-line @typescript-eslint/no-explicit-any
-            .map((m: any) => ({ id: m.name.replace("models/", ""), name: m.displayName || m.name })) // eslint-disable-line @typescript-eslint/no-explicit-any
-            .sort((a: any, b: any) => a.name.localeCompare(b.name)); // eslint-disable-line @typescript-eslint/no-explicit-any
+            .filter((m: FetchedModel) => m.supportedGenerationMethods?.includes("generateContent"))
+            .filter((m: FetchedModel) => m.name?.includes("gemini"))
+            .map((m: FetchedModel & { displayName?: string }) => ({ id: (m.name ?? m.id).replace("models/", ""), name: m.displayName || m.name || m.id }))
+            .sort((a: FetchedModel, b: FetchedModel) => (a.name ?? a.id).localeCompare(b.name ?? b.id));
         }
         case "groq": {
           const res = await requestUrl({
@@ -792,8 +779,8 @@ export class LifeCompanionSettingTab extends PluginSettingTab {
           });
           if (res.status !== 200) return [];
           return (res.json.data || [])
-            .map((m: any) => ({ id: m.id, name: m.id })) // eslint-disable-line @typescript-eslint/no-explicit-any
-            .sort((a: any, b: any) => a.id.localeCompare(b.id)); // eslint-disable-line @typescript-eslint/no-explicit-any
+            .map((m: FetchedModel) => ({ id: m.id, name: m.id }))
+            .sort((a: FetchedModel, b: FetchedModel) => a.id.localeCompare(b.id));
         }
       }
     } catch {
@@ -821,7 +808,7 @@ export class LifeCompanionSettingTab extends PluginSettingTab {
           }
         }
         dropdown.setValue(currentValue);
-        dropdown.onChange((value) => onChange(value as AIModel));
+        dropdown.onChange((value) => { void onChange(value as AIModel); });
       });
   }
 }

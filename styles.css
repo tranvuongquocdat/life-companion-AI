@@ -402,6 +402,7 @@ body.lc-resizing {
 
 .lc-input {
   width: 100%;
+  height: var(--input-height, auto);
   min-height: 28px;
   max-height: 60vh;
   resize: none;
@@ -454,6 +455,27 @@ body.lc-resizing {
 .lc-send-btn:disabled {
   opacity: 0.4;
   cursor: default;
+}
+
+.lc-send-btn.lc-send-stop {
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+  cursor: pointer;
+  pointer-events: auto;
+  z-index: 2;
+}
+
+.lc-send-btn.lc-send-stop:hover {
+  opacity: 0.85;
+}
+
+.lc-send-btn.lc-send-stop .svg-icon {
+  width: 10px;
+  height: 10px;
+}
+
+.lc-input:disabled {
+  pointer-events: none;
 }
 
 .lc-send-btn .svg-icon {
@@ -917,6 +939,23 @@ body.lc-resizing {
   font-size: 10px;
   color: var(--text-faint);
   font-family: var(--font-monospace);
+}
+
+.lc-settings-info {
+  padding: 12px;
+  margin-top: 8px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 8px;
+  background-color: var(--background-secondary);
+}
+
+.lc-settings-code {
+  padding: 8px;
+  border-radius: 4px;
+  background-color: var(--background-primary);
+  user-select: all;
+  white-space: pre-wrap;
+  word-break: break-all;
 }
 
 /* ─── Attachments ─────────────────────────────────────────── */

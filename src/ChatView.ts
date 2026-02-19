@@ -1,4 +1,4 @@
-import { ItemView, MarkdownRenderer, Notice, WorkspaceLeaf, setIcon } from "obsidian";
+import { App, ItemView, MarkdownRenderer, Modal, Notice, Setting, WorkspaceLeaf, setIcon } from "obsidian";
 import type LifeCompanionPlugin from "./main";
 import {
   MAX_ATTACHMENTS,
@@ -45,6 +45,7 @@ export class ChatView extends ItemView {
 
   // Track conversations currently processing (for tab switching — keeps live in-memory state)
   private processingConversations = new Map<string, ConversationState>();
+  private abortController: AbortController | null = null;
 
   // History panel
   private historyPanel: HTMLElement | null = null;
@@ -113,14 +114,14 @@ export class ChatView extends ItemView {
 
     const newTabBtn = tabActions.createEl("button", {
       cls: "lc-icon-btn",
-      attr: { "aria-label": "New Chat" },
+      attr: { "aria-label": "New chat" },
     });
     setIcon(newTabBtn, "plus");
     newTabBtn.addEventListener("click", () => this.createNewTab());
 
     this.historyBtn = tabActions.createEl("button", {
       cls: "lc-icon-btn",
-      attr: { "aria-label": "Chat History" },
+      attr: { "aria-label": "Chat history" },
     });
     setIcon(this.historyBtn, "clock");
     this.historyBtn.addEventListener("click", () => this.toggleHistory());
@@ -137,7 +138,7 @@ export class ChatView extends ItemView {
       if (!href) return;
       // Check if note is already open in a tab
       const existing = this.app.workspace.getLeavesOfType("markdown").find((leaf) => {
-        const file = (leaf.view as any)?.file; // eslint-disable-line @typescript-eslint/no-explicit-any
+        const file = (leaf.view as { file?: import("obsidian").TFile })?.file;
         return file && (file.path === href || file.path === href + ".md" || file.basename === href);
       });
       if (existing) {
@@ -194,11 +195,11 @@ export class ChatView extends ItemView {
     setIcon(attachBtn, "paperclip");
 
     this.fileInput = bottom.createEl("input", {
+      cls: "lc-hidden",
       attr: {
         type: "file",
         accept: "image/*,application/pdf,.md,.txt",
         multiple: "true",
-        style: "display:none",
       },
     }) as HTMLInputElement;
 
@@ -206,7 +207,7 @@ export class ChatView extends ItemView {
     this.fileInput.addEventListener("change", () => {
       if (this.fileInput.files) {
         for (const file of Array.from(this.fileInput.files)) {
-          this.addAttachmentFromFile(file);
+          void this.addAttachmentFromFile(file);
         }
         this.fileInput.value = "";
       }
@@ -218,7 +219,7 @@ export class ChatView extends ItemView {
     this.inputEl.addEventListener("keydown", (e: KeyboardEvent) => {
       if (e.key === "Enter" && !e.shiftKey) {
         e.preventDefault();
-        this.handleSend();
+        void this.handleSend();
       }
     });
 
@@ -235,7 +236,7 @@ export class ChatView extends ItemView {
         if (item.type.startsWith("image/")) {
           e.preventDefault();
           const blob = item.getAsFile();
-          if (blob) this.addAttachmentFromFile(blob);
+          if (blob) void this.addAttachmentFromFile(blob);
           return;
         }
       }
@@ -247,10 +248,28 @@ export class ChatView extends ItemView {
       attr: { "aria-label": "Send" },
     });
     setIcon(this.sendBtn, "arrow-up");
-    this.sendBtn.addEventListener("click", () => this.handleSend());
+    this.sendBtn.addEventListener("click", () => {
+      if (this.abortController) {
+        // Abort and immediately reset UI — don't wait for HTTP request to finish
+        this.abortController.abort();
+        this.abortController = null;
+        this.stopThinking();
+        this.stopStreaming();
+        const stopMsg = this.plugin.settings.language === "vi" ? "⏹ Đã dừng." : "⏹ Stopped.";
+        this.addAssistantMessage(stopMsg);
+        this.conversation.messages.push({ role: "assistant", content: stopMsg, timestamp: Date.now() });
+        this.sendBtn.removeClass("lc-send-stop");
+        setIcon(this.sendBtn, "arrow-up");
+        this.inputEl.disabled = false;
+        this.sendBtn.disabled = false;
+        this.inputEl.focus();
+        return;
+      }
+      void this.handleSend();
+    });
 
     // ─── Restore tabs ─────────────────────────────────────────
-    this.initTabs();
+    await this.initTabs();
   }
 
   async onClose() {
@@ -261,13 +280,13 @@ export class ChatView extends ItemView {
     if (this.conversation.messages.length > 0) {
       this.plugin.saveConversation(this.conversation);
     }
-    this.plugin.saveData(this.plugin.settings);
+    await this.plugin.saveData(this.plugin.settings);
     this.contentEl.empty();
   }
 
   // ─── Tabs ───────────────────────────────────────────────────
 
-  private initTabs() {
+  private async initTabs() {
     const s = this.plugin.settings;
     // Clean orphaned tabs (conversation was evicted from savedConversations)
     s.openTabs = s.openTabs.filter(
@@ -279,7 +298,7 @@ export class ChatView extends ItemView {
       this.plugin.saveConversation(this.conversation);
       s.openTabs = [this.conversation.id];
       s.activeTabId = this.conversation.id;
-      this.plugin.saveData(s);
+      await this.plugin.saveData(s);
       this.addAssistantMessage(this.t.greeting);
     } else if (s.activeTabId === ChatView.CALENDAR_TAB_ID) {
       // Restore calendar view — load first chat in background
@@ -289,7 +308,7 @@ export class ChatView extends ItemView {
       this.messagesContainer.addClass("lc-hidden");
       this.calendarContainer.removeClass("lc-hidden");
       this.bottomEl.addClass("lc-hidden");
-      this.renderCalendar();
+      await this.renderCalendar();
     } else {
       // Restore active tab
       const activeId = s.activeTabId && s.openTabs.includes(s.activeTabId)
@@ -375,7 +394,7 @@ export class ChatView extends ItemView {
     this.plugin.saveConversation(newConv);
     this.plugin.settings.openTabs.push(newConv.id);
     this.plugin.settings.activeTabId = newConv.id;
-    this.plugin.saveData(this.plugin.settings);
+    void this.plugin.saveData(this.plugin.settings);
 
     this.loadConversationState(newConv);
     this.renderTabs();
@@ -410,7 +429,7 @@ export class ChatView extends ItemView {
     this.sendBtn.disabled = false;
 
     this.plugin.settings.activeTabId = tabId;
-    this.plugin.saveData(this.plugin.settings);
+    void this.plugin.saveData(this.plugin.settings);
     this.renderTabs();
   }
 
@@ -423,14 +442,14 @@ export class ChatView extends ItemView {
     }
 
     this.plugin.settings.activeTabId = ChatView.CALENDAR_TAB_ID;
-    this.plugin.saveData(this.plugin.settings);
+    void this.plugin.saveData(this.plugin.settings);
 
     // Hide chat, show calendar
     this.messagesContainer.addClass("lc-hidden");
     this.calendarContainer.removeClass("lc-hidden");
     this.bottomEl.addClass("lc-hidden");
 
-    this.renderCalendar();
+    void this.renderCalendar();
     this.renderTabs();
   }
 
@@ -458,7 +477,7 @@ export class ChatView extends ItemView {
     prevBtn.addEventListener("click", () => {
       this.calendarMonth--;
       if (this.calendarMonth < 0) { this.calendarMonth = 11; this.calendarYear--; }
-      this.renderCalendar();
+      void this.renderCalendar();
     });
 
     const monthLabel = nav.createSpan({ cls: "lc-cal-month-label" });
@@ -470,7 +489,7 @@ export class ChatView extends ItemView {
     nextBtn.addEventListener("click", () => {
       this.calendarMonth++;
       if (this.calendarMonth > 11) { this.calendarMonth = 0; this.calendarYear++; }
-      this.renderCalendar();
+      void this.renderCalendar();
     });
 
     const todayBtn = nav.createEl("button", { cls: "lc-cal-today-btn", text: this.t.calendarToday });
@@ -479,7 +498,7 @@ export class ChatView extends ItemView {
       this.calendarMonth = now.getMonth();
       this.calendarYear = now.getFullYear();
       this.calendarSelectedDate = now.toISOString().split("T")[0];
-      this.renderCalendar();
+      void this.renderCalendar();
     });
 
     // Day-of-week header (respects start day setting)
@@ -491,11 +510,11 @@ export class ChatView extends ItemView {
     }
 
     // Get events for this month
-    let eventsMap = new Map<string, any[]>();
+    let eventsMap = new Map<string, CalendarEvent[]>();
     try {
       eventsMap = await cm.getEventsForMonth(this.calendarYear, this.calendarMonth);
-    } catch {
-      // No events directory configured
+    } catch (e) {
+      console.debug("Calendar events load failed:", e);
     }
 
     // Calculate grid
@@ -536,7 +555,7 @@ export class ChatView extends ItemView {
 
       cell.addEventListener("click", () => {
         this.calendarSelectedDate = dateStr;
-        this.renderCalendar();
+        void this.renderCalendar();
       });
     }
 
@@ -615,24 +634,25 @@ export class ChatView extends ItemView {
     }
   }
 
-  private async deleteCalendarEvent(filePath: string) {
-    if (!confirm(this.t.calendarDeleteConfirm)) return;
-    try {
-      const cm = this.plugin.calendarManager;
-      await cm.deleteEvent(filePath);
-      new Notice(this.t.calendarEventDeleted);
-      this.renderCalendar();
-    } catch (error) {
-      const msg = error instanceof Error ? error.message : "Unknown error";
-      new Notice(this.t.calendarSaveError(msg));
-    }
+  private deleteCalendarEvent(filePath: string) {
+    new ConfirmModal(this.app, this.t.calendarDeleteConfirm, async () => {
+      try {
+        const cm = this.plugin.calendarManager;
+        await cm.deleteEvent(filePath);
+        new Notice(this.t.calendarEventDeleted);
+        void this.renderCalendar();
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : "Unknown error";
+        new Notice(this.t.calendarSaveError(msg));
+      }
+    }).open();
   }
 
   private async toggleEventComplete(filePath: string, completed: boolean, date: string) {
     try {
       const cm = this.plugin.calendarManager;
       await cm.completeEvent(filePath, completed, date);
-      this.renderCalendar();
+      void this.renderCalendar();
     } catch (error) {
       const msg = error instanceof Error ? error.message : "Unknown error";
       new Notice(this.t.calendarSaveError(msg));
@@ -699,7 +719,7 @@ export class ChatView extends ItemView {
     if (existing?.endTime) endInput.value = existing.endTime;
 
     const updateTimeVisibility = () => {
-      timeRow.style.display = allDayCheck.checked ? "none" : "flex";
+      timeRow.toggleClass("lc-hidden", allDayCheck.checked);
     };
     allDayCheck.addEventListener("change", updateTimeVisibility);
     updateTimeVisibility();
@@ -818,7 +838,7 @@ export class ChatView extends ItemView {
     }
 
     const updateRecurEndVisibility = () => {
-      recurEndDateInput.style.display = recurEndSelect.value === "until" ? "block" : "none";
+      recurEndDateInput.toggleClass("lc-hidden", recurEndSelect.value !== "until");
     };
     recurEndSelect.addEventListener("change", updateRecurEndVisibility);
     updateRecurEndVisibility();
@@ -827,10 +847,10 @@ export class ChatView extends ItemView {
     const updateRepeatVisibility = () => {
       const val = repeatSelect.value;
       const customFreq = freqSelect.value;
-      customRow.style.display = val === "custom" ? "flex" : "none";
-      dayPillsRow.style.display = (val === "weekly" || (val === "custom" && customFreq === "weeks")) ? "flex" : "none";
-      recurEndRow.style.display = val !== "none" ? "flex" : "none";
-      endDateCol.style.display = val === "none" ? "block" : "none";
+      customRow.toggleClass("lc-hidden", val !== "custom");
+      dayPillsRow.toggleClass("lc-hidden", !(val === "weekly" || (val === "custom" && customFreq === "weeks")));
+      recurEndRow.toggleClass("lc-hidden", val === "none");
+      endDateCol.toggleClass("lc-hidden", val !== "none");
     };
     repeatSelect.addEventListener("change", updateRepeatVisibility);
     freqSelect.addEventListener("change", updateRepeatVisibility);
@@ -851,7 +871,7 @@ export class ChatView extends ItemView {
 
     cancelBtn.addEventListener("click", () => form.remove());
 
-    saveBtn.addEventListener("click", async () => {
+    saveBtn.addEventListener("click", () => { void (async () => {
       const title = titleInput.value.trim();
       if (!title) {
         titleInput.addClass("lc-cal-form-error");
@@ -984,14 +1004,14 @@ export class ChatView extends ItemView {
           new Notice(this.t.calendarEventCreated);
         }
 
-        this.renderCalendar();
+        void this.renderCalendar();
       } catch (error) {
         const msg = error instanceof Error ? error.message : "Unknown error";
         new Notice(this.t.calendarSaveError(msg));
         saveBtn.disabled = false;
         saveBtn.textContent = this.t.calendarSave;
       }
-    });
+    })(); });
 
     titleInput.focus();
   }
@@ -1014,7 +1034,7 @@ export class ChatView extends ItemView {
       }
     }
 
-    this.plugin.saveData(this.plugin.settings);
+    void this.plugin.saveData(this.plugin.settings);
     this.renderTabs();
   }
 
@@ -1068,7 +1088,7 @@ export class ChatView extends ItemView {
       // Dragging up = smaller Y = increase height
       const delta = startY - e.clientY;
       const newH = Math.max(28, Math.min(startH + delta, this.contentEl.clientHeight * 0.6));
-      this.inputEl.style.height = newH + "px";
+      this.inputEl.setCssProps({ "--input-height": newH + "px" });
     };
 
     const onMouseUp = () => {
@@ -1090,9 +1110,9 @@ export class ChatView extends ItemView {
   // ─── Auto-resize Textarea ─────────────────────────────────────
 
   private autoResizeInput() {
-    this.inputEl.style.height = "auto";
+    this.inputEl.setCssProps({ "--input-height": "auto" });
     const maxH = this.contentEl.clientHeight * 0.6;
-    this.inputEl.style.height = Math.min(this.inputEl.scrollHeight, maxH) + "px";
+    this.inputEl.setCssProps({ "--input-height": Math.min(this.inputEl.scrollHeight, maxH) + "px" });
   }
 
   private updateSendBtnState() {
@@ -1116,7 +1136,7 @@ export class ChatView extends ItemView {
       case "list_folder":
         return t.toolListing(String(input.path || "/"));
       case "get_recent_notes":
-        return t.toolRecentNotes(input.days);
+        return t.toolRecentNotes(Number(input.days || 0));
       case "web_search":
         return t.toolWebSearch(String(input.query || ""));
       case "web_fetch": {
@@ -1150,7 +1170,7 @@ export class ChatView extends ItemView {
       case "check_calendar_status":
         return t.toolCalendarCheck;
       case "get_events": {
-        const detail = input.date ? ` ${input.date}` : input.startDate ? ` ${input.startDate}–${input.endDate}` : "";
+        const detail = input.date ? ` ${String(input.date)}` : input.startDate ? ` ${String(input.startDate)}–${String(input.endDate)}` : "";
         return t.toolGettingEvents(detail);
       }
       case "create_event":
@@ -1160,7 +1180,7 @@ export class ChatView extends ItemView {
       case "delete_event":
         return t.toolDeletingEvent;
       case "get_upcoming_events":
-        return t.toolUpcoming(input.days || 7);
+        return t.toolUpcoming(Number(input.days || 7));
       case "save_memory":
         return t.toolSavingMemory;
       case "recall_memory":
@@ -1383,7 +1403,7 @@ export class ChatView extends ItemView {
             this.plugin.settings.openTabs.push(conv.id);
           }
           this.plugin.settings.activeTabId = conv.id;
-          this.plugin.saveData(this.plugin.settings);
+          void this.plugin.saveData(this.plugin.settings);
           this.loadConversation(conv);
           this.renderTabs();
           this.historyPanel?.remove();
@@ -1450,16 +1470,10 @@ export class ChatView extends ItemView {
 
     this.updateTokenCounter();
     this.scrollToBottom();
-    (this.leaf as any).updateHeader(); // eslint-disable-line @typescript-eslint/no-explicit-any
+    (this.leaf as unknown as { updateHeader?: () => void }).updateHeader?.();
   }
 
-  // ─── New Chat ─────────────────────────────────────────────────
-
-  private startNewChat() {
-    this.createNewTab();
-  }
-
-  // ─── Send Message ──────────���──────────────────────────────────
+  // ─── Send Message ──────────────────────────────────────────────
 
   private async handleSend() {
     const text = this.inputEl.value.trim();
@@ -1511,27 +1525,37 @@ export class ChatView extends ItemView {
     this.plugin.saveConversation(targetConv); // Crash safety: user message persists immediately
     this.renderTabs(); // show processing indicator
 
+    // Create AbortController and switch send → stop button
+    this.abortController = new AbortController();
     this.inputEl.disabled = true;
-    this.sendBtn.disabled = true;
+    this.sendBtn.disabled = false;
+    this.sendBtn.addClass("lc-send-stop");
+    setIcon(this.sendBtn, "square");
 
     try {
-      await this.plugin.handleMessage(text, targetConv, this, attachments);
+      await this.plugin.handleMessage(text, targetConv, this, attachments, this.abortController?.signal);
       targetConv.updatedAt = Date.now();
-      // Save the target conversation (not this.conversation which may have changed)
       this.plugin.saveConversation(targetConv);
     } finally {
+      // If abortController is already null, the abort click handler already reset the UI
+      const abortedByUser = !this.abortController;
+      this.abortController = null;
       this.processingConversations.delete(targetConv.id);
 
-      // If we're currently viewing this conversation, re-render to show complete response
-      if (this.conversation.id === targetConv.id) {
-        this.loadConversationState(targetConv);
+      if (!abortedByUser) {
+        // Normal completion — restore UI
+        this.sendBtn.removeClass("lc-send-stop");
+        setIcon(this.sendBtn, "arrow-up");
+        if (this.conversation.id === targetConv.id) {
+          this.loadConversationState(targetConv);
+        }
+        this.inputEl.disabled = false;
+        this.sendBtn.disabled = false;
+        this.inputEl.focus();
       }
 
-      this.inputEl.disabled = false;
-      this.sendBtn.disabled = false;
-      this.inputEl.focus();
       this.updateTokenCounter();
-      this.renderTabs(); // clear processing indicator
+      this.renderTabs();
     }
   }
 
@@ -1540,7 +1564,7 @@ export class ChatView extends ItemView {
   addUserMessage(text: string, attachmentRefs?: AttachmentRef[]) {
     if (this.conversation.messages.filter((m) => m.role === "user").length === 0) {
       this.conversation.title = text.length > 50 ? text.slice(0, 50) + "..." : text;
-      (this.leaf as any).updateHeader(); // eslint-disable-line @typescript-eslint/no-explicit-any
+      (this.leaf as unknown as { updateHeader?: () => void }).updateHeader?.();
       this.renderTabs();
     }
 
@@ -1746,5 +1770,21 @@ export class ChatView extends ItemView {
       }
       this.tokenCounterEl.setAttribute("title", tooltip);
     }
+  }
+}
+
+class ConfirmModal extends Modal {
+  private onConfirm: () => void | Promise<void>;
+
+  constructor(app: App, message: string, onConfirm: () => void | Promise<void>) {
+    super(app);
+    this.onConfirm = onConfirm;
+    this.setTitle(message);
+  }
+
+  onOpen() {
+    new Setting(this.contentEl)
+      .addButton((btn) => btn.setButtonText("Delete").setWarning().onClick(() => { void Promise.resolve(this.onConfirm()).then(() => this.close()); }))
+      .addButton((btn) => btn.setButtonText("Cancel").onClick(() => this.close()));
   }
 }

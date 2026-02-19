@@ -164,8 +164,8 @@ export class ProfileManager {
     if (existing) return; // Don't overwrite existing files
     try {
       await this.app.vault.rename(file, to);
-    } catch {
-      // Silently skip if rename fails
+    } catch (e) {
+      console.debug("Migration rename failed:", e);
     }
   }
 
@@ -181,8 +181,8 @@ export class ProfileManager {
         if (existing) continue; // Don't overwrite
         try {
           await this.app.vault.rename(child, newPath);
-        } catch {
-          // Silently skip
+        } catch (e) {
+          console.debug("Migration move failed:", e);
         }
       } else if (child instanceof TFolder) {
         // Redirect matching subfolders to root-level PARA folders
@@ -190,8 +190,8 @@ export class ProfileManager {
         if (!this.app.vault.getAbstractFileByPath(redirectTarget)) {
           try {
             await this.app.vault.createFolder(redirectTarget);
-          } catch {
-            // Folder may already exist
+          } catch (e) {
+            console.debug("Migration folder create skipped:", e);
           }
         }
         await this.migrateFolder(child.path, redirectTarget);
@@ -206,9 +206,9 @@ export class ProfileManager {
     if (!folder || !(folder instanceof TFolder)) return;
     if (folder.children.length === 0) {
       try {
-        await this.app.vault.delete(folder);
-      } catch {
-        // Silently skip
+        await this.app.fileManager.trashFile(folder);
+      } catch (e) {
+        console.debug("Migration folder delete failed:", e);
       }
     }
   }
