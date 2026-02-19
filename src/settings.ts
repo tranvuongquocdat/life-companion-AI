@@ -212,7 +212,7 @@ export class LifeCompanionSettingTab extends PluginSettingTab {
     const statusEl = containerEl.createDiv({ cls: "lc-sync-status" });
 
     // Check Syncthing status async
-    this.checkSyncStatus(syncthing, containerEl, statusEl);
+    void this.checkSyncStatus(syncthing, containerEl, statusEl);
   }
 
   private async checkSyncStatus(syncthing: SyncthingClient, containerEl: HTMLElement, statusEl: HTMLElement) {
@@ -233,7 +233,7 @@ export class LifeCompanionSettingTab extends PluginSettingTab {
             infoEl.createEl("p", { text: "Run this in your terminal:" });
             const codeBlock = infoEl.createEl("pre", { cls: "lc-settings-code" });
             codeBlock.textContent = installCmd;
-            infoEl.createEl("p", { text: "Then click Re-check below." });
+            infoEl.createEl("p", { text: "Then click re-check below." });
             btn.setDisabled(true);
           })
         );
@@ -249,7 +249,7 @@ export class LifeCompanionSettingTab extends PluginSettingTab {
     }
 
     // Syncthing is running — load API key
-    const hasKey = await syncthing.loadApiKey();
+    const hasKey = syncthing.loadApiKey();
     if (!hasKey) {
       new Setting(statusEl)
         .setName("Syncthing")
@@ -406,7 +406,7 @@ export class LifeCompanionSettingTab extends PluginSettingTab {
       new Setting(body)
         .setName(t.refreshModels)
         .addButton((btn) =>
-          btn.setButtonText("↻ Refresh").onClick(() => { void (async () => {
+          btn.setButtonText("Refresh").onClick(() => { void (async () => {
             btn.setButtonText("...");
             btn.setDisabled(true);
             const models = await this.fetchModelsForProvider(provider);
@@ -418,7 +418,7 @@ export class LifeCompanionSettingTab extends PluginSettingTab {
               this.display();
             } else {
               new Notice(t.noModelsFound);
-              btn.setButtonText("↻ Refresh");
+              btn.setButtonText("Refresh");
               btn.setDisabled(false);
             }
           })(); })
@@ -470,13 +470,13 @@ export class LifeCompanionSettingTab extends PluginSettingTab {
       openai: "openaiApiKey" as const,
       gemini: "geminiApiKey" as const,
       groq: "groqApiKey" as const,
-    }[provider]!;
+    }[provider];
 
     const placeholder = {
       openai: "sk-...",
       gemini: "AIza...",
       groq: "gsk_...",
-    }[provider]!;
+    }[provider];
 
     const currentKey = this.plugin.settings[keyField];
 
@@ -810,7 +810,7 @@ export class LifeCompanionSettingTab extends PluginSettingTab {
           }
         }
         dropdown.setValue(currentValue);
-        dropdown.onChange((value) => { void onChange(value as AIModel); });
+        dropdown.onChange((value) => { void onChange(value); });
       });
   }
 }

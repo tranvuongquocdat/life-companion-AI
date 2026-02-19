@@ -403,7 +403,7 @@ export class CalendarManager {
     if (!file || !(file instanceof TFile)) return `Event file not found: ${path}`;
 
     await this.app.fileManager.processFrontMatter(file, (fm) => {
-      const type = fm.type || "single";
+      const type = typeof fm.type === "string" ? fm.type : "single";
 
       if (type === "single") {
         if (completed) {

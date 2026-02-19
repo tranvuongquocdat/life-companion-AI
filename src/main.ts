@@ -167,7 +167,7 @@ export default class LifeCompanionPlugin extends Plugin {
         this.settings.tokenExpiresAt = tokens.expiresAt;
         await this.saveData(this.settings);
         this.initAIClient();
-      } catch (error) {
+      } catch {
         new Notice(getI18n(this.settings.language).tokenExpired);
         this.settings.accessToken = "";
         this.settings.refreshToken = "";
@@ -236,7 +236,7 @@ export default class LifeCompanionPlugin extends Plugin {
     const leaf = workspace.getRightLeaf(false);
     if (leaf) {
       await leaf.setViewState({ type: VIEW_TYPE_CHAT, active: true });
-      workspace.revealLeaf(leaf);
+      void workspace.revealLeaf(leaf);
     }
   }
 
@@ -327,7 +327,7 @@ export default class LifeCompanionPlugin extends Plugin {
             thinkingStopped = true;
           }
           accumulatedText += chunk;
-          view.renderMarkdown(streamEl, accumulatedText);
+          void view.renderMarkdown(streamEl, accumulatedText);
           view.scrollToBottom();
         },
         onThinking: (thinkingText) => {
@@ -360,7 +360,7 @@ export default class LifeCompanionPlugin extends Plugin {
           ? "\n\n🔄 *Phát hiện chưa gọi tool — đang tự sửa...*"
           : "\n\n🔄 *Detected missing tool call — auto-correcting...*";
         accumulatedText += retryNotice;
-        view.renderMarkdown(streamEl, accumulatedText);
+        void view.renderMarkdown(streamEl, accumulatedText);
 
         // Build correction context: add the hallucinated response + correction instruction
         const correctionMsg = this.settings.language === "vi"
@@ -395,7 +395,7 @@ export default class LifeCompanionPlugin extends Plugin {
             }
             retryText += chunk;
             // Replace the correction notice with the retry response
-            view.renderMarkdown(streamEl, retryText);
+            void view.renderMarkdown(streamEl, retryText);
             view.scrollToBottom();
           },
           onThinking: () => {},
@@ -425,7 +425,7 @@ export default class LifeCompanionPlugin extends Plugin {
             : "\n\n⚠️ *Note: Still didn't successfully save/create anything. Please ask again!*";
           response += warning;
           accumulatedText += warning;
-          view.renderMarkdown(streamEl, accumulatedText);
+          void view.renderMarkdown(streamEl, accumulatedText);
         }
 
         // Track retry token usage
@@ -582,93 +582,93 @@ export default class LifeCompanionPlugin extends Plugin {
     try {
       switch (name) {
         case "search_vault":
-          return await this.vaultTools.searchVault(String(input.query ?? ""));
+          return await this.vaultTools.searchVault(typeof input.query === "string" ? input.query : "");
         case "read_note":
-          return await this.vaultTools.readNote(String(input.path ?? ""));
+          return await this.vaultTools.readNote(typeof input.path === "string" ? input.path : "");
         case "write_note":
-          return await this.vaultTools.writeNote(String(input.path ?? ""), String(input.content ?? ""));
+          return await this.vaultTools.writeNote(typeof input.path === "string" ? input.path : "", typeof input.content === "string" ? input.content : "");
         case "move_note":
-          return await this.vaultTools.moveNote(String(input.from ?? ""), String(input.to ?? ""));
+          return await this.vaultTools.moveNote(typeof input.from === "string" ? input.from : "", typeof input.to === "string" ? input.to : "");
         case "list_folder":
-          return this.vaultTools.listFolder(String(input.path ?? ""));
+          return this.vaultTools.listFolder(typeof input.path === "string" ? input.path : "");
         case "get_recent_notes":
-          return this.vaultTools.getRecentNotes(Number(input.days ?? 0));
+          return this.vaultTools.getRecentNotes(typeof input.days === "number" ? input.days : 0);
         case "get_snapshots":
-          return this.vaultTools.getSnapshots(String(input.path ?? ""));
+          return this.vaultTools.getSnapshots(typeof input.path === "string" ? input.path : "");
         case "read_snapshot":
-          return await this.vaultTools.readSnapshot(String(input.path ?? ""));
+          return await this.vaultTools.readSnapshot(typeof input.path === "string" ? input.path : "");
         case "web_search":
-          return await this.vaultTools.webSearch(String(input.query ?? ""));
+          return await this.vaultTools.webSearch(typeof input.query === "string" ? input.query : "");
         case "web_fetch":
-          return await this.vaultTools.webFetch(String(input.url ?? ""));
+          return await this.vaultTools.webFetch(typeof input.url === "string" ? input.url : "");
         case "append_note":
-          return await this.vaultTools.appendNote(String(input.path ?? ""), String(input.content ?? ""));
+          return await this.vaultTools.appendNote(typeof input.path === "string" ? input.path : "", typeof input.content === "string" ? input.content : "");
         case "read_properties":
-          return this.vaultTools.readProperties(String(input.path ?? ""));
+          return this.vaultTools.readProperties(typeof input.path === "string" ? input.path : "");
         case "update_properties":
-          return await this.vaultTools.updateProperties(String(input.path ?? ""), input.properties as Record<string, unknown>);
+          return await this.vaultTools.updateProperties(typeof input.path === "string" ? input.path : "", (typeof input.properties === "object" && input.properties !== null) ? input.properties as Record<string, unknown> : {});
         case "get_tags":
           return this.vaultTools.getTags();
         case "search_by_tag":
-          return this.vaultTools.searchByTag(String(input.tag ?? ""));
+          return this.vaultTools.searchByTag(typeof input.tag === "string" ? input.tag : "");
         case "get_vault_stats":
           return this.vaultTools.getVaultStats();
         case "get_backlinks":
-          return this.vaultTools.getBacklinks(String(input.path ?? ""));
+          return this.vaultTools.getBacklinks(typeof input.path === "string" ? input.path : "");
         case "get_outgoing_links":
-          return this.vaultTools.getOutgoingLinks(String(input.path ?? ""));
+          return this.vaultTools.getOutgoingLinks(typeof input.path === "string" ? input.path : "");
         case "get_tasks":
-          return await this.vaultTools.getTasks(String(input.path ?? ""), input.includeCompleted !== false);
+          return await this.vaultTools.getTasks(typeof input.path === "string" ? input.path : "", input.includeCompleted !== false);
         case "toggle_task":
-          return await this.vaultTools.toggleTask(String(input.path ?? ""), Number(input.line ?? 0));
+          return await this.vaultTools.toggleTask(typeof input.path === "string" ? input.path : "", typeof input.line === "number" ? input.line : 0);
         case "get_daily_note":
-          return await this.vaultTools.getDailyNote(String(input.date ?? ""));
+          return await this.vaultTools.getDailyNote(typeof input.date === "string" ? input.date : "");
         case "create_daily_note":
-          return await this.vaultTools.createDailyNote(String(input.date ?? ""), String(input.content ?? ""));
+          return await this.vaultTools.createDailyNote(typeof input.date === "string" ? input.date : "", typeof input.content === "string" ? input.content : "");
         // Calendar tools
         case "check_calendar_status":
           return await this.calendarManager.checkCalendarStatus();
         case "get_events":
-          return await this.calendarManager.getEvents(String(input.date ?? ""), String(input.startDate ?? ""), String(input.endDate ?? ""));
+          return await this.calendarManager.getEvents(typeof input.date === "string" ? input.date : "", typeof input.startDate === "string" ? input.startDate : "", typeof input.endDate === "string" ? input.endDate : "");
         case "create_event":
           return await this.calendarManager.createEvent({
-            title: String(input.title ?? ""),
-            date: String(input.date ?? ""),
-            startTime: String(input.startTime ?? ""),
-            endTime: String(input.endTime ?? ""),
+            title: typeof input.title === "string" ? input.title : "",
+            date: typeof input.date === "string" ? input.date : "",
+            startTime: typeof input.startTime === "string" ? input.startTime : "",
+            endTime: typeof input.endTime === "string" ? input.endTime : "",
             allDay: input.allDay === true,
-            endDate: String(input.endDate ?? ""),
-            type: (String(input.type ?? "single")) as "single" | "recurring" | "rrule",
-            daysOfWeek: Array.isArray(input.daysOfWeek) ? input.daysOfWeek.map(String) : [],
-            startRecur: String(input.startRecur ?? ""),
-            endRecur: String(input.endRecur ?? ""),
-            rrule: String(input.rrule ?? ""),
-            body: String(input.body ?? ""),
+            endDate: typeof input.endDate === "string" ? input.endDate : "",
+            type: (typeof input.type === "string" ? input.type : "single") as "single" | "recurring" | "rrule",
+            daysOfWeek: Array.isArray(input.daysOfWeek) ? input.daysOfWeek.map(v => typeof v === "string" ? v : String(v)) : [],
+            startRecur: typeof input.startRecur === "string" ? input.startRecur : "",
+            endRecur: typeof input.endRecur === "string" ? input.endRecur : "",
+            rrule: typeof input.rrule === "string" ? input.rrule : "",
+            body: typeof input.body === "string" ? input.body : "",
           });
         case "update_event":
-          return await this.calendarManager.updateEvent(String(input.path ?? ""), (input.properties ?? {}) as Record<string, unknown>);
+          return await this.calendarManager.updateEvent(typeof input.path === "string" ? input.path : "", (typeof input.properties === "object" && input.properties !== null) ? input.properties as Record<string, unknown> : {});
         case "delete_event":
-          return await this.calendarManager.deleteEvent(String(input.path ?? ""));
+          return await this.calendarManager.deleteEvent(typeof input.path === "string" ? input.path : "");
         case "complete_event":
-          return await this.calendarManager.completeEvent(String(input.path ?? ""), input.completed === true, input.date ? String(input.date) : undefined);
+          return await this.calendarManager.completeEvent(typeof input.path === "string" ? input.path : "", input.completed === true, typeof input.date === "string" ? input.date : undefined);
         case "get_upcoming_events":
-          return await this.calendarManager.getUpcomingEvents(Number(input.days ?? 0) || 7);
+          return await this.calendarManager.getUpcomingEvents((typeof input.days === "number" ? input.days : 0) || 7);
         // Memory & Goals tools
         case "save_memory":
-          return await this.vaultTools.saveMemory(String(input.content ?? ""), String(input.type ?? ""));
+          return await this.vaultTools.saveMemory(typeof input.content === "string" ? input.content : "", typeof input.type === "string" ? input.type : "");
         case "recall_memory":
-          return await this.vaultTools.recallMemory(String(input.query ?? ""), Number(input.days ?? 0), Number(input.limit ?? 0));
+          return await this.vaultTools.recallMemory(typeof input.query === "string" ? input.query : "", typeof input.days === "number" ? input.days : 0, typeof input.limit === "number" ? input.limit : 0);
         case "gather_retro_data":
-          return await this.vaultTools.gatherRetroData(String(input.startDate ?? ""), String(input.endDate ?? ""));
+          return await this.vaultTools.gatherRetroData(typeof input.startDate === "string" ? input.startDate : "", typeof input.endDate === "string" ? input.endDate : "");
         case "save_retro":
-          return await this.vaultTools.saveRetro(String(input.period ?? ""), String(input.content ?? ""));
+          return await this.vaultTools.saveRetro(typeof input.period === "string" ? input.period : "", typeof input.content === "string" ? input.content : "");
         case "get_goals":
           return await this.vaultTools.getGoals();
         case "update_goal":
-          return await this.vaultTools.updateGoal(String(input.title ?? ""), {
-            status: String(input.status ?? ""),
-            progress: String(input.progress ?? ""),
-            target: String(input.target ?? ""),
+          return await this.vaultTools.updateGoal(typeof input.title === "string" ? input.title : "", {
+            status: typeof input.status === "string" ? input.status : "",
+            progress: typeof input.progress === "string" ? input.progress : "",
+            target: typeof input.target === "string" ? input.target : "",
           });
         default:
           return `Unknown tool: ${name}`;

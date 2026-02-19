@@ -144,7 +144,7 @@ export class ChatView extends ItemView {
       if (existing) {
         this.app.workspace.setActiveLeaf(existing, { focus: true });
       } else {
-        this.app.workspace.openLinkText(href, "", "tab");
+        void this.app.workspace.openLinkText(href, "", "tab");
       }
     });
 
@@ -177,7 +177,7 @@ export class ChatView extends ItemView {
     this.modelSelect = toolbar.createEl("select", { cls: "lc-model-select" });
     this.populateModelSelect();
     this.modelSelect.addEventListener("change", () => {
-      this.selectedModel = this.modelSelect.value as AIModel;
+      this.selectedModel = this.modelSelect.value;
       this.conversation.model = this.selectedModel;
       this.updateTokenCounter();
     });
@@ -201,7 +201,7 @@ export class ChatView extends ItemView {
         accept: "image/*,application/pdf,.md,.txt",
         multiple: "true",
       },
-    }) as HTMLInputElement;
+    });
 
     attachBtn.addEventListener("click", () => this.fileInput.click());
     this.fileInput.addEventListener("change", () => {
@@ -609,7 +609,7 @@ export class ChatView extends ItemView {
           setIcon(completeBtn, event.completed ? "check-circle" : "circle");
           completeBtn.addEventListener("click", (e) => {
             e.stopPropagation();
-            this.toggleEventComplete(event.filePath, !event.completed, this.calendarSelectedDate!);
+            void this.toggleEventComplete(event.filePath, !event.completed, this.calendarSelectedDate!);
           });
 
           const editBtn = actions.createEl("button", { cls: "lc-cal-action-btn", attr: { "aria-label": this.t.calendarEditEvent } });
@@ -627,7 +627,7 @@ export class ChatView extends ItemView {
           });
 
           item.addEventListener("click", () => {
-            this.app.workspace.openLinkText(event.filePath, "", "tab");
+            void this.app.workspace.openLinkText(event.filePath, "", "tab");
           });
         }
       }
@@ -1126,73 +1126,73 @@ export class ChatView extends ItemView {
     const t = this.t;
     switch (name) {
       case "search_vault":
-        return t.toolSearching(String(input.query ?? ""));
+        return t.toolSearching(typeof input.query === "string" ? input.query : "");
       case "read_note":
-        return t.toolReading(String(input.path ?? ""));
+        return t.toolReading(typeof input.path === "string" ? input.path : "");
       case "write_note":
-        return t.toolWriting(String(input.path ?? ""));
+        return t.toolWriting(typeof input.path === "string" ? input.path : "");
       case "move_note":
-        return t.toolMoving(String(input.from ?? ""), String(input.to ?? ""));
+        return t.toolMoving(typeof input.from === "string" ? input.from : "", typeof input.to === "string" ? input.to : "");
       case "list_folder":
-        return t.toolListing(String(input.path ?? "/"));
+        return t.toolListing(typeof input.path === "string" ? input.path : "/");
       case "get_recent_notes":
-        return t.toolRecentNotes(Number(input.days ?? 0));
+        return t.toolRecentNotes(typeof input.days === "number" ? input.days : 0);
       case "web_search":
-        return t.toolWebSearch(String(input.query ?? ""));
+        return t.toolWebSearch(typeof input.query === "string" ? input.query : "");
       case "web_fetch": {
-        const url = String(input.url ?? "");
+        const url = typeof input.url === "string" ? input.url : "";
         return t.toolFetching(url.length > 40 ? url.slice(0, 40) + "..." : url);
       }
       case "append_note":
-        return t.toolAppending(String(input.path ?? ""));
+        return t.toolAppending(typeof input.path === "string" ? input.path : "");
       case "read_properties":
-        return t.toolReadingProps(String(input.path ?? ""));
+        return t.toolReadingProps(typeof input.path === "string" ? input.path : "");
       case "update_properties":
-        return t.toolUpdatingProps(String(input.path ?? ""));
+        return t.toolUpdatingProps(typeof input.path === "string" ? input.path : "");
       case "get_tags":
         return t.toolGettingTags;
       case "search_by_tag":
-        return t.toolSearchingTag(String(input.tag ?? ""));
+        return t.toolSearchingTag(typeof input.tag === "string" ? input.tag : "");
       case "get_vault_stats":
         return t.toolVaultStats;
       case "get_backlinks":
-        return t.toolBacklinks(String(input.path ?? ""));
+        return t.toolBacklinks(typeof input.path === "string" ? input.path : "");
       case "get_outgoing_links":
-        return t.toolOutgoing(String(input.path ?? ""));
+        return t.toolOutgoing(typeof input.path === "string" ? input.path : "");
       case "get_tasks":
-        return t.toolGettingTasks(String(input.path ?? "vault"));
+        return t.toolGettingTasks(typeof input.path === "string" ? input.path : "vault");
       case "toggle_task":
         return t.toolTogglingTask;
       case "get_daily_note":
-        return t.toolDailyRead(input.date ? String(input.date) : undefined);
+        return t.toolDailyRead(typeof input.date === "string" ? input.date : undefined);
       case "create_daily_note":
-        return t.toolDailyCreate(input.date ? String(input.date) : undefined);
+        return t.toolDailyCreate(typeof input.date === "string" ? input.date : undefined);
       case "check_calendar_status":
         return t.toolCalendarCheck;
       case "get_events": {
-        const detail = input.date ? ` ${String(input.date)}` : input.startDate ? ` ${String(input.startDate)}–${String(input.endDate)}` : "";
+        const detail = typeof input.date === "string" ? ` ${input.date}` : typeof input.startDate === "string" ? ` ${input.startDate}–${typeof input.endDate === "string" ? input.endDate : ""}` : "";
         return t.toolGettingEvents(detail);
       }
       case "create_event":
-        return t.toolCreatingEvent(String(input.title ?? ""), String(input.date ?? ""));
+        return t.toolCreatingEvent(typeof input.title === "string" ? input.title : "", typeof input.date === "string" ? input.date : "");
       case "update_event":
         return t.toolUpdatingEvent;
       case "delete_event":
         return t.toolDeletingEvent;
       case "get_upcoming_events":
-        return t.toolUpcoming(Number(input.days ?? 7));
+        return t.toolUpcoming(typeof input.days === "number" ? input.days : 7);
       case "save_memory":
         return t.toolSavingMemory;
       case "recall_memory":
-        return t.toolRecalling(input.query ? String(input.query) : undefined);
+        return t.toolRecalling(typeof input.query === "string" ? input.query : undefined);
       case "gather_retro_data":
-        return t.toolGatheringRetro(String(input.startDate ?? ""), String(input.endDate ?? ""));
+        return t.toolGatheringRetro(typeof input.startDate === "string" ? input.startDate : "", typeof input.endDate === "string" ? input.endDate : "");
       case "save_retro":
-        return t.toolSavingRetro(String(input.period ?? ""));
+        return t.toolSavingRetro(typeof input.period === "string" ? input.period : "");
       case "get_goals":
         return t.toolGettingGoals;
       case "update_goal":
-        return t.toolUpdatingGoal(String(input.title ?? ""));
+        return t.toolUpdatingGoal(typeof input.title === "string" ? input.title : "");
       default:
         return t.toolUsing(name);
     }
@@ -1463,7 +1463,7 @@ export class ChatView extends ItemView {
           el.createDiv({ cls: "lc-msg-text", text: msg.content });
         } else {
           const el = this.messagesContainer.createDiv({ cls: "lc-msg lc-msg-assistant" });
-          this.renderMarkdown(el, msg.content);
+          void this.renderMarkdown(el, msg.content);
         }
       }
     }
@@ -1583,7 +1583,7 @@ export class ChatView extends ItemView {
     const msg: ChatMessage = { role: "assistant", content: text, timestamp: Date.now() };
     this.conversation.messages.push(msg);
     const el = this.messagesContainer.createDiv({ cls: "lc-msg lc-msg-assistant" });
-    this.renderMarkdown(el, text);
+    void this.renderMarkdown(el, text);
     this.scrollToBottom();
     this.updateTokenCounter();
   }
@@ -1647,7 +1647,7 @@ export class ChatView extends ItemView {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = () => {
-        const result = String(reader.result ?? "");
+        const result = typeof reader.result === "string" ? reader.result : "";
         resolve(result.split(",")[1]); // strip data:...;base64, prefix
       };
       reader.onerror = reject;

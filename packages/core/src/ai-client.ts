@@ -427,7 +427,7 @@ export class AIClient {
 
       if (choice.finish_reason !== "tool_calls" || !msg.tool_calls?.length) break;
 
-      for (const toolCall of msg.tool_calls!) {
+      for (const toolCall of msg.tool_calls) {
         if (signal?.aborted) break;
         const fn = toolCall.function;
         const args = JSON.parse(fn.arguments) as Record<string, unknown>;

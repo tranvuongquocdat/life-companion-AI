@@ -4,7 +4,9 @@
   "description": "AI life companition Obsidian plugin",
   "main": "main.js",
   "type": "module",
-  "workspaces": ["packages/core"],
+  "workspaces": [
+    "packages/core"
+  ],
   "scripts": {
     "dev": "node esbuild.config.mjs",
     "build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
@@ -17,10 +19,13 @@
   "devDependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
     "@types/node": "^22.0.0",
+    "@typescript-eslint/eslint-plugin": "^8.56.0",
+    "@typescript-eslint/parser": "^8.56.0",
     "esbuild": "^0.25.0",
+    "eslint": "^9.39.2",
+    "eslint-plugin-obsidianmd": "^0.1.9",
     "obsidian": "latest",
     "typescript": "^5.8.0",
     "vitest": "^3.0.0"
-  },
-  "dependencies": {}
+  }
 }
