@@ -160,6 +160,13 @@
   border-radius: 12px 12px 4px 12px;
 }
 
+/* Text selection in user messages — contrast against accent background */
+.lc-msg-user::selection,
+.lc-msg-user *::selection {
+  background: rgba(255, 255, 255, 0.35);
+  color: inherit;
+}
+
 .lc-msg-assistant {
   align-self: flex-start;
   background: var(--background-secondary);
@@ -234,6 +241,26 @@
   border-radius: 0;
   font-size: 0.85em;
   line-height: 1.5;
+}
+
+/* Copy button in code blocks */
+.lc-msg-assistant pre {
+  position: relative;
+}
+
+.lc-msg-assistant pre .copy-code-button {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  padding: 2px 8px;
+  font-size: 10px;
+  border-radius: 4px;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.lc-msg-assistant pre:hover .copy-code-button {
+  opacity: 1;
 }
 
 .lc-msg-assistant blockquote {
